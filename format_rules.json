@@ -1,0 +1,33 @@
+{
+  "school": "仲恺农业工程学院外国语学院",
+  "doc_type": "毕业论文（设计）",
+  "rules": [
+    {"id": "page_size", "name": "页面大小", "spec": "A4", "check": "static", "note": "由打印设置保证"},
+    {"id": "line_spacing", "name": "行距", "spec": "1.5倍行距", "check": "docx.paragraph_format.line_spacing"},
+    {"id": "page_margin", "name": "页边距", "spec": "上下左右各2.4cm", "check": "section.top/bottom/left/right"},
+    {"id": "header", "name": "页眉", "spec": "全部不加页眉", "check": "header_distance"},
+    {"id": "body_font_zh", "name": "正文字体（中文）", "spec": "宋体 / Times New Roman（英文）小四号", "check": "run.font.name"},
+    {"id": "body_font_en", "name": "正文字体（英文）", "spec": "Times New Roman 小四号", "check": "run.font.name"},
+    {"id": "body_size", "name": "正文字号", "spec": "小四号（12pt）", "check": "run.font.size"},
+    {"id": "h1_font", "name": "一级标题字体", "spec": "Times New Roman 四号 加粗 左顶格", "check": "heading"},
+    {"id": "h1_size", "name": "一级标题字号", "spec": "四号（14pt）", "check": "heading"},
+    {"id": "h1_bold", "name": "一级标题加粗", "spec": "加粗", "check": "run.bold"},
+    {"id": "h2_font_size", "name": "二级标题", "spec": "Times New Roman 小四号 加粗", "check": "heading"},
+    {"id": "abstract_zh_keyword", "name": "中文摘要关键词", "spec": "3-5个，分号分隔", "check": "regex"},
+    {"id": "abstract_en_keyword", "name": "英文摘要关键词", "spec": "3-5个，逗号/分号分隔", "check": "regex"},
+    {"id": "reference_format", "name": "参考文献格式", "spec": "GB/T 7714风格，[序号]作者. 题名[J/M/N]. 出版地: 出版者, 年. 页码.", "check": "regex"},
+    {"id": "reference_min_count", "name": "参考文献数量", "spec": "不少于15篇", "check": "count"},
+    {"id": "quote_method", "name": "引用方式", "spec": "顺序编码制，方括号上标", "check": "regex"},
+    {"id": "page_number", "name": "页码", "spec": "正文每页下端居中，阿拉伯数字", "check": "footer"},
+    {"id": "roman_toc_page", "name": "目录页码", "spec": "大写罗马数字 I, II", "check": "footer"},
+    {"id": "no_page_on_abstract", "name": "摘要不标页码", "spec": "摘要及关键词不标页码", "check": "manual"},
+    {"id": "binding_order", "name": "装订顺序", "spec": "封面→扉页→承诺书→中文摘要→英文摘要→缩略词→目录→正文→参考文献→附录→致谢→成绩评定表", "check": "static"},
+    {"id": "word_count_arts", "name": "字数要求（经管文法类）", "spec": "正文不低于1万字", "check": "count"},
+    {"id": "word_count_theory", "name": "字数要求（理论研究类）", "spec": "正文不低于1.5万字", "check": "count"},
+    {"id": "example_numbering", "name": "举例编号", "spec": "Example 1, Example 2 顺序排列", "check": "regex"},
+    {"id": "figure_caption", "name": "图题格式", "spec": "Diagram 1 标题（Times New Roman 5号，居中）", "check": "regex"},
+    {"id": "table_caption", "name": "表题格式", "spec": "Table 1 标题（Times New Roman 5号，居中）", "check": "regex"},
+    {"id": "table_style", "name": "表格样式", "spec": "三线表", "check": "table_style"},
+    {"id": "bilingual_title", "name": "中英文标题", "spec": "论文需中英文题目", "check": "presence"}
+  ]
+}

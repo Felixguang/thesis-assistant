@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.dist-info/
+
+# 虚拟环境
+venv/
+env/
+.venv/
+
+# 临时敏感数据
+.DS_Store
+
+# PyInstaller 构建产物
+build/
+dist/
+*.spec
+
+# 论文样本（绝对不能传）
+# 测试论文1.docx / 测试论文2.docx / 测试论文3.docx / 优秀论文.docx
+# 这些文件位于 _prototype/ 的父目录，默认就不在 git 范围内
+
+# 用户数据目录（运行时创建）
+~/Documents/毕业论文助手/
