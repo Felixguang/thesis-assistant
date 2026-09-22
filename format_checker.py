@@ -386,6 +386,25 @@ def _has_page_break_before(paragraph) -> bool:
     return False
 
 
+def _has_visual_break_before(paragraph) -> bool:
+    """检查段落前是否有 ≥1 个完全空段（用作视觉分隔）。
+
+    真实论文常靠段前空行模拟"另起一页"，不算正式分页但能接受。
+    """
+    count = 0
+    prev = paragraph._p.getprevious()
+    while prev is not None and count < 5:
+        # 空段：text 为空且没有 page break
+        text = "".join(prev.itertext()).strip()
+        has_br = any(br.get(qn("w:type")) == "page" for br in prev.iter(qn("w:br")))
+        if not text and not has_br:
+            count += 1
+            prev = prev.getprevious()
+            continue
+        break
+    return count >= 1
+
+
 def _is_run_superscript(run) -> bool:
     """检查 run 是否为上标（<w:vertAlign w:val='superscript'/>）。"""
     rPr = run._r.find(qn("w:rPr"))
@@ -1881,15 +1900,23 @@ def check_document(docx_path: str) -> dict:
                     "suggestion": "标题各层实词首字母应大写，虚词小写",
                     "zone": zone,
                 })
-            # 章节另起一页
+            # 章节另起一页（仅 L1 检查；L2/L3 不要求）
             if not _has_page_break_before(para):
+                has_visual = _has_visual_break_before(para)
                 _add_issue({
                     "rule": "章节另起一页",
                     "severity": "低",
                     "location": f"第{idx+1}段：「{text[:40]}」",
-                    "expected": "每章（一级标题）另起一页",
-                    "actual": "未发现分页符或 pageBreakBefore",
-                    "suggestion": "在 L1 标题前插入分页符（Insert > Page Break）",
+                    "expected": "每章（一级标题）另起一页（规范要求）",
+                    "actual": "未发现分页符"
+                    + ("  [视觉上有空行分隔]" if has_visual else ""),
+                    "suggestion": (
+                        "在 L1 标题前插入分页符："
+                        "1) Word 中光标定位到 L1 标题段开头"
+                        "2) 快捷键 Ctrl+Enter 插入分页符"
+                        "（注意：仅靠段前空行不算正式另起一页，"
+                        "导师要求严格时仍需分页符）"
+                    ),
                     "zone": zone,
                 })
         elif level == 2 and para.runs:
