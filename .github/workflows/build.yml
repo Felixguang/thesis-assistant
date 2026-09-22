@@ -1,0 +1,85 @@
+name: 构建 Windows / macOS 可执行程序
+
+on:
+  push:
+    branches: [main]
+    # 也可以加 tag 触发：tags: ['v*']
+  workflow_dispatch:    # 允许手动触发
+
+jobs:
+  build:
+    name: 打包 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖（macOS）
+        if: matrix.os == 'macos-latest'
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 安装依赖（Windows）
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: PyInstaller 打包（macOS）
+        if: matrix.os == 'macos-latest'
+        run: |
+          pyinstaller --onefile --windowed --name "商务英语毕业论文助手" \
+            --add-data "data/topics.json:data" \
+            --collect-submodules=docx \
+            --collect-submodules=openpyxl \
+            --collect-submodules=xlrd \
+            --hidden-import=openpyxl.styles \
+            app.py
+
+      - name: PyInstaller 打包（Windows）
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          pyinstaller --onefile --windowed --name "商务英语毕业论文助手" `
+            --add-data "data/topics.json;data" `
+            --collect-submodules=docx `
+            --collect-submodules=openpyxl `
+            --collect-submodules=xlrd `
+            --hidden-import=openpyxl.styles `
+            app.py
+
+      - name: 压缩产物（macOS）
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd dist
+          zip -r 商务英语毕业论文助手-macOS.zip 商务英语毕业论文助手.app
+
+      - name: 重命名产物（Windows）
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd dist
+          Compress-Archive -Path "商务英语毕业论文助手.exe" `
+            -DestinationPath "商务英语毕业论文助手-Windows.zip"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: 商务英语毕业论文助手-${{ matrix.os }}
+          path: |
+            dist/*.zip
+            dist/*.app/  # macOS（仅 macOS runner 存在）
+          if-no-files-found: warn
