@@ -1,3 +1,6 @@
 python-docx>=1.0.0
 openpyxl>=3.1.0
 xlrd>=1.2.0
+
+# 打包工具（仅 GitHub Actions 打包时需要，本地开发可选）
+pyinstaller>=6.0.0
