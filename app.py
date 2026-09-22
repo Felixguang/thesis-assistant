@@ -867,8 +867,41 @@ class ThesisAssistantApp:
             messagebox.showerror("导入失败", f"错误: {e}\n\n文件: {path}")
 
 
+def _setup_high_dpi():
+    """在创建 Tk 根之前开启 HiDPI 感知，避免打包后界面变小。
+
+    - Windows: 设置进程 DPI 感知为 system-aware，让 tk 跟随系统缩放
+    - Linux:   Qt/GTK 会自动处理；tk 默认不支持，留给 OS
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            # 0=unaware, 1=system-aware, 2=per-monitor
+            # 用 1 跟随系统缩放（最稳，避免多显示器不一致）
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except (AttributeError, OSError):
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
+
 def main():
+    _setup_high_dpi()
     root = tk.Tk()
+
+    # macOS Retina 屏需要 tk scaling = 2.0 才能跟系统一致（普通屏 1.0）
+    # 探测方式：winfo_fpixels("1c") 返回 1cm 对应的物理像素数
+    #   普通屏 ≈ 567 (~96 DPI)；Retina ≈ 1134 (~192 DPI)
+    if sys.platform == "darwin":
+        try:
+            root.update_idletasks()
+            px_per_cm = root.winfo_fpixels("1c")
+            scaling = 2.0 if px_per_cm > 800 else 1.0
+            root.tk.call("tk", "scaling", scaling)
+        except Exception:
+            pass
+
     ThesisAssistantApp(root)
     root.update_idletasks()
     root.update()
