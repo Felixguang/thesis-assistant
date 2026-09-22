@@ -40,7 +40,8 @@ _RE_TOC_ZH_SPACED = re.compile(r"^目\s+录")
 _RE_TOC_ZH = re.compile(r"^目录")
 _RE_REF_ZH = re.compile(r"^参考文献")
 _RE_REF_EN = re.compile(r"^Bibliography", re.I)
-_RE_APPENDIX = re.compile(r"^\s*Appendix\s+[A-Z]")
+_RE_APPENDIX = re.compile(r"^\s*Appendix(\s+[A-Z]|\s*[:：]|\s*$|\s+[A-Za-z一-鿿])")
+_RE_APPENDIX_SOLO = re.compile(r"^\s*Appendix\s*$")
 _RE_ACK_ZH = re.compile(r"^致谢")
 _RE_ACK_EN = re.compile(r"^Acknowledgement", re.I)
 _RE_EXAMPLE = re.compile(r"^\s*Example\s+\d+\s*[:：]")
@@ -168,8 +169,10 @@ def _detect_zones(doc) -> Dict[str, Tuple[int, int]]:
             return "目录"
         if (_RE_REF_ZH.match(text) or _RE_REF_EN.match(text)) and len(text) < 100:
             return "参考文献"
-        if _RE_APPENDIX.match(text) and len(text) < 100:
-            return "附录"
+        # Appendix 标题：单独成段、正文、或带编号 "Appendix A: ..."
+        if _RE_APPENDIX_SOLO.match(text) or _RE_APPENDIX.match(text):
+            if len(text) < 100:
+                return "附录"
         if _RE_ACK_ZH.match(text) or _RE_ACK_EN.match(text) and len(text) < 100:
             return "致谢"
         return None
@@ -210,12 +213,18 @@ def _zone_of(body_idx: int, zones: Dict[str, Tuple[int, int]]) -> str:
     return "未知"
 
 
-def _get_effective_font(run, paragraph, has_chinese: bool = None) -> Optional[str]:
+def _get_effective_font(run, paragraph, has_chinese: Optional[bool] = None) -> Optional[str]:
     """获取 run 的有效字体。
     如果段落含中文字符，看 eastAsia（中文）；否则看 ascii/hAnsi（英文）。
     因为优秀论文设置惯例：ascii=Times New Roman / eastAsia=宋体 / hAnsi=Times New Roman
+
+    has_chinese=None 时自动检测（按 run 文本是否含中文）。
     """
     from docx.oxml.ns import qn
+
+    # 自动检测：run 文本含中文 → True
+    if has_chinese is None:
+        has_chinese = bool(run.text) and any('一' <= ch <= '鿿' for ch in run.text)
 
     rPr = run._element.find(qn('w:rPr'))
     if rPr is not None:
@@ -444,20 +453,20 @@ def _is_example_caption(text: str) -> bool:
 # 正则只校验最关键的字段（类型标识 + 年份 + 出版地），避免误判。
 
 REF_TYPE_PATTERNS = {
-    # 专著 [M]：类型标识 + 年份
-    "M":   r"\[M\].*(\d{4})",
-    # 期刊 [J]：类型标识 + 年份 + 期号或卷号
-    "J":   r"\[J\].*\d{4}",
+    # 专著 [M]：类型标识存在即可（GB/T 7714 中年份在条目尾部，不强制紧跟 [M]）
+    "M":   r"\[M\]",
+    # 期刊 [J]
+    "J":   r"\[J\]",
     # 论文集 [C]
-    "C":   r"\[C\].*(\d{4})",
+    "C":   r"\[C\]",
     # 学位论文 [D]
-    "D":   r"\[D\].*(\d{4})",
+    "D":   r"\[D\]",
     # 报告 [R]
-    "R":   r"\[R\].*(\d{4})",
+    "R":   r"\[R\]",
     # 报纸 [N]
-    "N":   r"\[N\].*\d{4}",
+    "N":   r"\[N\]",
     # 标准 [S]
-    "S":   r"\[S\]\.",
+    "S":   r"\[S\]",
     # 专利 [P]
     "P":   r"\[P\]",
     # 论文集析出 [A]
@@ -1347,7 +1356,7 @@ def check_document(docx_path: str) -> dict:
                 run = _first_nonempty_run(para) if para.runs else None
                 if run:
                     sz = _consensus_size(para) or _get_effective_size(run, para)
-                    fn = _get_effective_font(run, para)
+                    fn = _get_effective_font(run, para, has_chinese=True)
                     if sz and abs(sz - EXPECTED["abstract_title_size_pt"]) > 1.5:
                         _add_issue({
                             "rule": "中文摘要标题字号",
