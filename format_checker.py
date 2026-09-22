@@ -219,6 +219,7 @@ def _get_effective_font(run, paragraph, has_chinese: Optional[bool] = None) -> O
     因为优秀论文设置惯例：ascii=Times New Roman / eastAsia=宋体 / hAnsi=Times New Roman
 
     has_chinese=None 时自动检测（按 run 文本是否含中文）。
+    当 run 级 ascii/hAnsi 缺失时，会查段落 pPr 继承；都缺时查 pStyle 样式定义。
     """
     from docx.oxml.ns import qn
 
@@ -226,34 +227,28 @@ def _get_effective_font(run, paragraph, has_chinese: Optional[bool] = None) -> O
     if has_chinese is None:
         has_chinese = bool(run.text) and any('一' <= ch <= '鿿' for ch in run.text)
 
+    def _read_rFonts(rFonts):
+        """从 rFonts 元素读对应字体（按 has_chinese 决定 ascii/eastAsia 优先级）。
+        缺失字段返回 None，调用方决定是否回退到样式。"""
+        if has_chinese:
+            return rFonts.get(qn('w:eastAsia')) or rFonts.get(qn('w:ascii')) or rFonts.get(qn('w:hAnsi'))
+        else:
+            return rFonts.get(qn('w:ascii')) or rFonts.get(qn('w:hAnsi'))
+
+    # 1. run 级 rFonts
     rPr = run._element.find(qn('w:rPr'))
     if rPr is not None:
         rFonts = rPr.find(qn('w:rFonts'))
         if rFonts is not None:
-            if has_chinese:
-                # 中文优先看 eastAsia
-                east_asia = rFonts.get(qn('w:eastAsia'))
-                if east_asia:
-                    return east_asia
-                # 否则 ascii
-                ascii_f = rFonts.get(qn('w:ascii')) or rFonts.get(qn('w:hAnsi'))
-                if ascii_f:
-                    return ascii_f
-            else:
-                # 英文优先看 ascii/hAnsi
-                ascii_f = rFonts.get(qn('w:ascii')) or rFonts.get(qn('w:hAnsi'))
-                if ascii_f:
-                    return ascii_f
-                # 否则 eastAsia
-                east_asia = rFonts.get(qn('w:eastAsia'))
-                if east_asia:
-                    return east_asia
+            f = _read_rFonts(rFonts)
+            if f:
+                return f
 
-    # python-docx 解析的 font.name
+    # 2. python-docx 解析的 font.name（仅当 ascii 非空时返回）
     if run.font.name:
         return run.font.name
 
-    # 段落 pPr.rFonts
+    # 3. 段落 pPr.rFonts
     if paragraph is not None:
         pPr = paragraph._element.find(qn('w:pPr'))
         if pPr is not None:
@@ -261,20 +256,26 @@ def _get_effective_font(run, paragraph, has_chinese: Optional[bool] = None) -> O
             if p_rPr is not None:
                 rFonts = p_rPr.find(qn('w:rFonts'))
                 if rFonts is not None:
-                    if has_chinese:
-                        east_asia = rFonts.get(qn('w:eastAsia'))
-                        if east_asia:
-                            return east_asia
-                        ascii_f = rFonts.get(qn('w:ascii')) or rFonts.get(qn('w:hAnsi'))
-                        if ascii_f:
-                            return ascii_f
-                    else:
-                        ascii_f = rFonts.get(qn('w:ascii')) or rFonts.get(qn('w:hAnsi'))
-                        if ascii_f:
-                            return ascii_f
-                        east_asia = rFonts.get(qn('w:eastAsia'))
-                        if east_asia:
-                            return east_asia
+                    f = _read_rFonts(rFonts)
+                    if f:
+                        return f
+
+            # 4. pStyle 样式定义里的 rFonts（如 toc 1 / heading 1 等）
+            pStyle = pPr.find(qn('w:pStyle'))
+            if pStyle is not None:
+                style_id = pStyle.get(qn('w:val'))
+                if style_id:
+                    try:
+                        style = paragraph.part.document.styles[style_id]
+                        s_rPr = style.element.find(qn('w:rPr'))
+                        if s_rPr is not None:
+                            rFonts = s_rPr.find(qn('w:rFonts'))
+                            if rFonts is not None:
+                                f = _read_rFonts(rFonts)
+                                if f:
+                                    return f
+                    except (KeyError, AttributeError):
+                        pass
     return None
 
 
