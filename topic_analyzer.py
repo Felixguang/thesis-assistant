@@ -11,7 +11,9 @@ import re
 from collections import Counter
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent / "data"
+from paths import resource_path
+
+DATA_DIR = resource_path("data")
 TOPICS_PATH = DATA_DIR / "topics.json"
 
 # 商务英语领域词典（中文正向最大匹配）
@@ -365,9 +367,43 @@ def check_scope(title: str) -> dict:
     }
 
 
+_LIB_CACHE = {"data": None, "mtime": None, "path": None}
+
+
+def _load_from_disk():
+    """从用户目录或内置路径读取库。"""
+    from paths import user_data_path
+    user_topics = user_data_path("topics.json")
+    if user_topics.exists():
+        try:
+            return user_topics, json.loads(user_topics.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass  # 用户版损坏则回退到内置
+    return TOPICS_PATH, json.loads(TOPICS_PATH.read_text(encoding="utf-8"))
+
+
 def load_library():
-    with open(TOPICS_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    """优先读用户目录 ~/Documents/毕业论文助手/topics.json，回退到打包内置版。
+
+    带文件 mtime 缓存：文件未变时直接返回内存副本，避免重复 IO+JSON parse。
+    """
+    from paths import user_data_path
+    user_topics = user_data_path("topics.json")
+    path = user_topics if user_topics.exists() else TOPICS_PATH
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = -1
+    if _LIB_CACHE["data"] is not None and _LIB_CACHE["mtime"] == mtime and _LIB_CACHE["path"] == path:
+        return _LIB_CACHE["data"]
+    actual_path, data = _load_from_disk()
+    _LIB_CACHE.update({"data": data, "mtime": mtime, "path": actual_path})
+    return data
+
+
+def invalidate_library_cache():
+    """导入新数据后调用，让下次 load_library 重新读盘。"""
+    _LIB_CACHE.update({"data": None, "mtime": None, "path": None})
 
 
 def get_library_insights() -> dict:

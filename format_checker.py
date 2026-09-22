@@ -28,6 +28,29 @@ FONT_SIZE = {
     "五号": 10.5, "小五": 9,
 }
 
+# === 预编译正则（热路径，避免重复 JIT） ===
+_RE_TOC_ENTRY = re.compile(r"\t\s*PAGEREF|\t\s*\d+$|\s+\d{1,3}\s*$")
+_RE_NOTE_PREFIX = re.compile(r"^注[：:]\s*1\.")
+_RE_GRADE_QUOTE = re.compile(r"^[“”]等级[“”][：:]")
+_RE_ABSTRACT_ZH_SPACED = re.compile(r"^摘\s+要")
+_RE_ABSTRACT_ZH = re.compile(r"^摘要")
+_RE_ABSTRACT_EN = re.compile(r"^Abstract", re.I)
+_RE_TOC_EN = re.compile(r"^Table of Contents", re.I)
+_RE_TOC_ZH_SPACED = re.compile(r"^目\s+录")
+_RE_TOC_ZH = re.compile(r"^目录")
+_RE_REF_ZH = re.compile(r"^参考文献")
+_RE_REF_EN = re.compile(r"^Bibliography", re.I)
+_RE_APPENDIX = re.compile(r"^\s*Appendix\s+[A-Z]")
+_RE_ACK_ZH = re.compile(r"^致谢")
+_RE_ACK_EN = re.compile(r"^Acknowledgement", re.I)
+_RE_EXAMPLE = re.compile(r"^\s*Example\s+\d+\s*[:：]")
+_RE_DIAGRAM = re.compile(r"^\s*(Diagram|Figure|图)\s*\d+", re.I)
+_RE_TABLE = re.compile(r"^\s*(Table|表)\s*\d+", re.I)
+_RE_REF_TYPE_TAG = re.compile(r"\[(M|J|C|D|R|N|S|P|A|EB/OL|DB/CD|Z)\]")
+_RE_HEADING_NUM = re.compile(r"^\s*(\d+(?:\.\d+){0,2})\s+[一-龥A-Za-z]")
+_RE_PAGEREF_TAB = re.compile(r"\t\s*PAGEREF\b")
+_RE_CHINESE_CHAR = re.compile(r"[一-鿿]")
+
 # === 期望值（来自规范文档 + 优秀论文范文 + 规范示例截图）===
 EXPECTED = {
     "body_font_zh": "宋体",
@@ -128,29 +151,26 @@ def _detect_zones(doc) -> Dict[str, Tuple[int, int]]:
         if not text:
             return None
         # 目录项特征：包含 tab + 数字（页码），排除之
-        is_toc_entry = bool(re.search(r"\t\s*PAGEREF|\t\s*\d+$|\s+\d{1,3}\s*$", text))
+        is_toc_entry = bool(_RE_TOC_ENTRY.search(text))
         if is_toc_entry:
             return None
         # 成绩评定表注释：开头"注：1."或"等级"
-        if re.match(r"^注[：:]\s*1\.", text) or re.match(r"^[“”]等级[“”][：:]", text):
+        if _RE_NOTE_PREFIX.match(text) or _RE_GRADE_QUOTE.match(text):
             return "成绩评定表"
         head = text[:15]
         if "学生承诺书" in head and len(text) < 100:
             return "学生承诺书"
-        if (re.match(r"^摘\s+要", text) or re.match(r"^摘要", text)):
+        if _RE_ABSTRACT_ZH_SPACED.match(text) or _RE_ABSTRACT_ZH.match(text):
             return "中文摘要"
-        if re.match(r"^Abstract", text, re.I) and len(text) < 100:
+        if _RE_ABSTRACT_EN.match(text) and len(text) < 100:
             return "英文摘要"
-        if (re.match(r"^Table of Contents", text, re.I)
-                or re.match(r"^目\s+录", text)
-                or re.match(r"^目录", text)) and len(text) < 100:
+        if (_RE_TOC_EN.match(text) or _RE_TOC_ZH_SPACED.match(text) or _RE_TOC_ZH.match(text)) and len(text) < 100:
             return "目录"
-        if (re.match(r"^参考文献", text) or re.match(r"^Bibliography", text)) and len(text) < 100:
+        if (_RE_REF_ZH.match(text) or _RE_REF_EN.match(text)) and len(text) < 100:
             return "参考文献"
-        if re.match(r"^\s*Appendix\s+[A-Z]", text) and len(text) < 100:
+        if _RE_APPENDIX.match(text) and len(text) < 100:
             return "附录"
-        if (re.match(r"^致谢", text)
-                or re.match(r"^Acknowledgement", text, re.I)) and len(text) < 100:
+        if _RE_ACK_ZH.match(text) or _RE_ACK_EN.match(text) and len(text) < 100:
             return "致谢"
         return None
 
@@ -414,7 +434,7 @@ def _is_run_bold_inherited(run, paragraph) -> Optional[bool]:
 
 def _is_example_caption(text: str) -> bool:
     """匹配 Example N: 或 Example N：开头的例证标题。"""
-    return bool(re.match(r"^\s*Example\s+\d+\s*[:：]", text))
+    return bool(_RE_EXAMPLE.match(text))
 
 
 # === 参考文献类型正则（批次 5）===
@@ -453,7 +473,7 @@ REF_TYPE_PATTERNS = {
 
 def _get_reference_type(text: str) -> Optional[str]:
     """从参考文献条目中提取类型标识（如 [M]/[J]/[EB/OL]）。"""
-    m = re.search(r"\[(M|J|C|D|R|N|S|P|A|EB/OL|DB/CD|Z)\]", text)
+    m = _RE_REF_TYPE_TAG.search(text)
     if m:
         return m.group(1)
     return None
@@ -486,7 +506,7 @@ def _consensus_size(paragraph) -> Optional[float]:
 
 def _detect_heading_level(text: str) -> Optional[int]:
     """根据文本模式判断章节层级：1 / 1.1 / 1.1.1"""
-    m = re.match(r"^\s*(\d+(?:\.\d+){0,2})\s+[一-龥A-Za-z]", text)
+    m = _RE_HEADING_NUM.match(text)
     if not m:
         return None
     return m.group(1).count(".") + 1
@@ -516,9 +536,9 @@ def _is_reference_entry(text: str) -> bool:
 
 def _is_figure_or_table_caption(text: str) -> Tuple[bool, Optional[str]]:
     """判断是否为图题/表题，返回 (是否, 类型)"""
-    if re.match(r"^\s*(Diagram|Figure|图)\s*\d+", text, re.I):
+    if _RE_DIAGRAM.match(text):
         return True, "图题"
-    if re.match(r"^\s*(Table|表)\s*\d+", text, re.I):
+    if _RE_TABLE.match(text):
         return True, "表题"
     return False, None
 
@@ -555,7 +575,7 @@ def _is_toc_paragraph(para) -> bool:
     if sn in _TOC_STYLE_NAMES:
         return True
     text = para.text or ""
-    if re.search(r"\t\s*PAGEREF\b", text):
+    if _RE_PAGEREF_TAB.search(text):
         return True
     # TOC 条目典型形式："...\t<页号>" 或 "...\t<页号>\n"
     if re.search(r"\t\s*\d{1,3}\s*$", text.rstrip()):

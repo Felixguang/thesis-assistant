@@ -16,12 +16,59 @@ if sys.platform == "win32":
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
+from typing import Optional
 
 from format_checker import check_document, mark_doc_with_issues, SEVERITY_COLOR
-from topic_analyzer import analyze_topic, load_library, get_library_insights
+from paths import atomic_write, user_data_path
+from topic_analyzer import analyze_topic, invalidate_library_cache, load_library, get_library_insights
 
 
-# 跨平台中文字体检测
+# 跨平台中文字体检测（模块级缓存，避免反复探测）
+_LINUX_CN_FONT: Optional[str] = None
+
+
+def _detect_linux_cn_font() -> Optional[str]:
+    """探测当前 Linux 桌面可用的中文字体（fc-list 优先，回退 tk 探测）。
+
+    结果模块级缓存，避免每次创建新 Tk root。
+    """
+    global _LINUX_CN_FONT
+    if _LINUX_CN_FONT is not None:
+        return _LINUX_CN_FONT if _LINUX_CN_FONT else None
+    candidates = (
+        "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei",
+        "WenQuanYi Zen Hei", "Droid Sans Fallback", "Sarasa Gothic SC",
+        "Microsoft YaHei",  # WSL 下也可能用
+    )
+    # 优先 fc-list：避免新建 Tk 实例
+    try:
+        import subprocess
+        r = subprocess.run(
+            ["fc-list", ":lang=zh"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if r.returncode == 0:
+            available = r.stdout
+            for c in candidates:
+                if c in available:
+                    _LINUX_CN_FONT = c
+                    return c
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    # 回退 tk 探测（不创建 root，用 font families）
+    try:
+        import tkinter.font as tkfont
+        families = set(tkfont.families())
+        for c in candidates:
+            if c in families:
+                _LINUX_CN_FONT = c
+                return c
+    except Exception:
+        pass
+    _LINUX_CN_FONT = ""  # 已探测但无结果，避免重复探测
+    return None
+
+
 def _cn_font(size: int = 10, bold: bool = False) -> tuple:
     """根据操作系统返回可用的中文字体。找不到就退回系统默认。"""
     weights = ("bold",) if bold else ()
@@ -31,13 +78,9 @@ def _cn_font(size: int = 10, bold: bool = False) -> tuple:
         # Windows 优先用微软雅黑，找不到退回系统默认中文字体
         return ("Microsoft YaHei", size) + weights
     else:  # Linux / 其他
-        # 常见 Linux 桌面环境字体
-        for f in ("Noto Sans CJK SC", "WenQuanYi Micro Hei", "Droid Sans Fallback"):
-            try:
-                tk.Tk().tk.call("font", "metrics", f)
-                return (f, size) + weights
-            except tk.TclError:
-                continue
+        f = _detect_linux_cn_font()
+        if f:
+            return (f, size) + weights
         return ("TkDefaultFont", size) + weights
 
 
@@ -522,7 +565,7 @@ class ThesisAssistantApp:
 
         tk.Label(filter_frame, text="搜索:", font=_cn_font(10)).pack(side="left")
         self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self._refresh_library())
+        self.search_var.trace_add("write", lambda *_: self._schedule_refresh())
         tk.Entry(filter_frame, textvariable=self.search_var,
                  font=_cn_font(10), width=30, relief="solid", bd=1).pack(side="left", padx=5)
 
@@ -532,7 +575,7 @@ class ThesisAssistantApp:
         ttk.Combobox(filter_frame, textvariable=self.direction_var,
                      values=directions, state="readonly", width=12
                      ).pack(side="left", padx=5)
-        self.direction_var.trace_add("write", lambda *_: self._refresh_library())
+        self.direction_var.trace_add("write", lambda *_: self._schedule_refresh())
 
         tk.Label(filter_frame, text="年份:", font=_cn_font(10)).pack(side="left", padx=(20, 0))
         self.year_var = tk.StringVar(value="全部")
@@ -540,7 +583,7 @@ class ThesisAssistantApp:
         ttk.Combobox(filter_frame, textvariable=self.year_var,
                      values=years, state="readonly", width=8
                      ).pack(side="left", padx=5)
-        self.year_var.trace_add("write", lambda *_: self._refresh_library())
+        self.year_var.trace_add("write", lambda *_: self._schedule_refresh())
 
         # 导出按钮（单独一行，靠右，避免被搜索/筛选控件挤窄）
         export_row = ttk.Frame(f)
@@ -592,16 +635,22 @@ class ThesisAssistantApp:
 
         self._refresh_library()
 
+    def _schedule_refresh(self):
+        """debounce：搜索/筛选变更后 200ms 再刷新，避免每个键击都重绘 Treeview。"""
+        if hasattr(self, "_refresh_after_id") and self._refresh_after_id:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+        self._refresh_after_id = self.after(200, self._refresh_library)
+
     def _refresh_library(self):
         lib = load_library()
         keyword = self.search_var.get().strip().lower()
         direction = self.direction_var.get()
         year = self.year_var.get()
 
-        for item in self.library_tree.get_children():
-            self.library_tree.delete(item)
-
-        # 收集当前筛选结果（导出按钮要用）
+        # 收集筛选结果
         matched = []
         for t in lib["topics"]:
             if direction != "全部" and t.get("direction") != direction:
@@ -616,13 +665,14 @@ class ThesisAssistantApp:
         # 按届别倒序、标题字典序，2019 在末尾、2026 在最前
         matched.sort(key=lambda t: (-int(str(t.get('year', '0')) or 0), t['title']))
 
-        count = 0
+        # 高效更新：先 detach 所有 → 重新 insert → 避免逐个 delete
+        for item in self.library_tree.get_children():
+            self.library_tree.delete(item)
         for t in matched:
             self.library_tree.insert("", "end", values=(
                 t["id"], t["title"][:55] + ("…" if len(t["title"]) > 55 else ""),
                 t.get("direction", "其他"),
             ))
-            count += 1
 
         self.status_var.set(
             f"选题库: {lib['metadata']['total']} 条 | "
@@ -760,14 +810,33 @@ class ThesisAssistantApp:
                     f"文件解析成功但没有提取到选题。\n\n可能是文件格式不在支持范围内。\n文件: {Path(path).name}",
                 )
                 return
-            # 合并到现有库
+            # 合并到现有库（先算合并结果但不写）
             lib = load_library()
             merged, added = merge_with_existing(lib["topics"], new_topics)
-            # 写回
+
+            # 用户确认对话框（避免误操作）
+            confirm = messagebox.askyesno(
+                "确认导入",
+                f"即将合并到本地选题库：\n\n"
+                f"  文件: {Path(path).name}\n"
+                f"  解析到: {len(new_topics)} 条\n"
+                f"  新增（去重后）: {added} 条\n"
+                f"  合并后总数: {len(merged)} 条\n\n"
+                f"确定要写回本地库吗？",
+            )
+            if not confirm:
+                self.status_var.set("导入已取消")
+                return
+
+            # 写到用户数据目录（不在源码目录）+ 原子写入
             lib["topics"] = merged
             lib["metadata"]["total"] = len(merged)
-            with open(Path(__file__).parent / "data" / "topics.json", "w", encoding="utf-8") as f:
-                json.dump(lib, f, ensure_ascii=False, indent=2)
+            user_topics = user_data_path("topics.json")
+            atomic_write(
+                user_topics,
+                json.dumps(lib, ensure_ascii=False, indent=2),
+            )
+            invalidate_library_cache()
 
             # 刷新浏览页
             self._refresh_library()
@@ -779,6 +848,7 @@ class ThesisAssistantApp:
                 f"  解析到: {len(new_topics)} 条\n"
                 f"  新增（去重后）: {added} 条\n"
                 f"  库总数: {len(merged)} 条\n\n"
+                f"数据已保存到：\n{user_topics}\n\n"
                 f"提示：可在『📚 选题库浏览』中查看新数据。",
             )
         except Exception as e:
