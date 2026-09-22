@@ -1927,7 +1927,7 @@ def check_document(docx_path: str) -> dict:
                     "location": f"第{idx+1}段：「{text[:40]}」",
                     "expected": "左顶格",
                     "actual": "居中",
-                    "suggestion": "一级标题应左顶格，不应居中。请选中该段，开始选项卡 → 段落 → 对齐方式 → 左对齐（Ctrl+L）",
+                    "suggestion": "一级标题应左顶格",
                     "zone": zone,
                 })
         elif level == 2 and para.runs:
@@ -1984,7 +1984,7 @@ def check_document(docx_path: str) -> dict:
                     "location": f"第{idx+1}段：「{text[:40]}」",
                     "expected": "左顶格",
                     "actual": "居中",
-                    "suggestion": "二级标题应左顶格，不应居中。请选中该段，开始选项卡 → 段落 → 对齐方式 → 左对齐（Ctrl+L）",
+                    "suggestion": "二级标题应左顶格",
                     "zone": zone,
                 })
         elif level == 3 and para.runs:
@@ -2041,7 +2041,7 @@ def check_document(docx_path: str) -> dict:
                     "location": f"第{idx+1}段：「{text[:40]}」",
                     "expected": "左顶格",
                     "actual": "居中",
-                    "suggestion": "三级标题应左顶格，不应居中。请选中该段，开始选项卡 → 段落 → 对齐方式 → 左对齐（Ctrl+L）",
+                    "suggestion": "三级标题应左顶格",
                     "zone": zone,
                 })
 
