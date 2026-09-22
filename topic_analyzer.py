@@ -480,8 +480,7 @@ def get_library_insights() -> dict:
             kw_counter[kw.strip()] += 1
     top_keywords = kw_counter.most_common(30)
 
-    # 理论热度 + 方向归属
-    theory_counter = Counter()
+    # 理论热度 + 方向归属（直接扫描题目标题，每题每个理论最多计 1 次）
     theory_dir_map = {
         # 翻译方向（含较冷门的可作为推荐）
         "功能对等": "翻译", "目的论": "翻译", "生态翻译学": "翻译",
@@ -509,12 +508,12 @@ def get_library_insights() -> dict:
         # 通用（跨多个方向）
         "顺应论": "通用", "礼貌原则": "通用", "言语行为": "通用",
     }
+    theory_counter = Counter()
     for t in topics:
-        for kw in t.get("keywords", []):
-            for th, th_dir in theory_dir_map.items():
-                if th in kw:
-                    theory_counter[th] += 1
-                    break
+        title = t.get("title", "")
+        for th in theory_dir_map:
+            if th in title:
+                theory_counter[th] += 1
 
     # 题目长度
     lengths = [len(t.get("title", "").replace(" ", "").replace("\n", ""))
@@ -665,8 +664,9 @@ def _build_reference_topics(
 ):
     """推荐符合所有要求的近三年参考题目。
     要求：① 商务英语 4 大范围；② 选题三要素齐全（理论+对象+主题）；
-         ③ 与用户题目关键词不撞；④ 优先近三年。
+         ③ 与用户题目关键词不撞；④ 优先近三年；⑤ 同方向优先。
     """
+    import random
     candidates = []
     for t in lib["topics"]:
         # 年份限制（近三年/四年）
@@ -685,22 +685,25 @@ def _build_reference_topics(
         nz = _check_narrowness(title, ti, oi)
         if nz["level"] != "聚焦":
             continue
-        # 不撞关键词
-        t_kws = set()
-        for kw in t.get("keywords", []):
+        # 不撞关键词（题目没存 keywords 字段时，从标题临时提取）
+        t_kws = t.get("keywords") or extract_keywords(title)
+        t_kws_set = set()
+        for kw in t_kws:
             for k in re.split(r"[\s,;]+", kw):
                 k = k.strip()
                 if k and k.lower() not in STOPWORDS and len(k) >= 2:
-                    t_kws.add(k.lower())
-        overlap = user_kw_set & t_kws
+                    t_kws_set.add(k.lower())
+        overlap = user_kw_set & t_kws_set
         if len(overlap) >= 2:
             continue
-        # 排序分：年份越近越好
+        # 排序分：方向匹配 +2，年份越近越好
         yr_score = {"2026": 4, "2025": 3, "2024": 2, "2023": 1}.get(t.get("year", ""), 0)
-        candidates.append((yr_score, len(overlap), t))
+        dir_match = 2 if t.get("direction") == direction and direction != "其他" else 0
+        candidates.append((dir_match, yr_score, len(overlap), random.random(), t))
 
-    candidates.sort(key=lambda x: (-x[0], x[1]))
-    return [t for _, _, t in candidates[:n]]
+    # 先按方向匹配 + 年份降序；并列时随机选
+    candidates.sort(key=lambda x: (-x[0], -x[1], x[2], x[3]))
+    return [t for _, _, _, _, t in candidates[:n]]
 
 
 def analyze_topic(user_title: str) -> dict:
@@ -888,26 +891,27 @@ def analyze_topic(user_title: str) -> dict:
     suggestions.append("【5/5】具体改进建议 + 近三年参考题目")
     # 改进建议
     if not scope_result["in_scope"]:
-        suggestions.append("   ① 改方向：参考下面 4 大方向的示例")
+        suggestions.append("   • 改方向：参考下面 4 大方向的示例")
     if narrowness["level"] in ("过宽", "偏宽"):
-        suggestions.append("   ② 加三要素：参考段 2/5 缺失项")
-        # 把理论分两组：高频 vs 冷门
-        # 高频 = 前 5 名（用 ≥ 24 次）：谨慎使用
-        # 冷门 = 6 名之后但仍有 3+ 次使用：推荐（更创新）
-        high_freq = insights["top_theories"][:5]
-        all_theories = insights["top_theories"][5:]
-        # 按用户当前方向过滤相关理论（无方向时显示全部冷门）
-        if direction == "其他":
-            relevant_cold = all_theories
-        else:
-            relevant_cold = [t for t in all_theories if t[2] in (direction, "通用")]
-            if len(relevant_cold) < 3:
-                # 相关不足时补全
-                relevant_cold = all_theories[:5]
+        suggestions.append("   • 加三要素：参考段 2/5 缺失项")
 
+    # 理论热度榜（总是显示）：高频理论 vs 冷门理论
+    # 高频 = 前 5 名：撞题风险高，谨慎使用
+    # 冷门 = 6+ 名：更具创新性，按用户方向过滤
+    high_freq = insights["top_theories"][:5]
+    all_theories = insights["top_theories"][5:]
+    if direction == "其他":
+        relevant_cold = all_theories
+    else:
+        relevant_cold = [t for t in all_theories if t[2] in (direction, "通用")]
+        if len(relevant_cold) < 3:
+            relevant_cold = all_theories[:5]
+
+    if high_freq:
         suggestions.append("      ⚠️  谨慎使用（往届 ≥ 24 次，撞题风险高）：")
         for th, c, _ in high_freq:
             suggestions.append(f"      • {th}（往届用过 {c} 次）")
+    if relevant_cold:
         suggestions.append("")
         suggestions.append(f"      ✨ 推荐使用（冷门且与「{direction}」方向相关，更具创新性）：")
         for th, c, d in relevant_cold[:5]:
@@ -915,10 +919,10 @@ def analyze_topic(user_title: str) -> dict:
             suggestions.append(f"      • {th}（往届用过 {c} 次）{tag}")
     if matches and matches[0]["overlap_count"] >= 3:
         top_match = matches[0]
-        suggestions.append(f"   ③ 去撞题：与 {top_match['year']} 届「{top_match['title'][:30]}」撞题严重")
+        suggestions.append(f"   • 去撞题：与 {top_match['year']} 届「{top_match['title'][:30]}」撞题严重")
         suggestions.append("      三种改法：换案例 / 换理论 / 缩子方向")
     if length_info["assessment"] in ("偏短", "偏长", "字数需调整"):
-        suggestions.append("   ④ 调字数：参考段 4/5 建议范围")
+        suggestions.append("   • 调字数：参考段 4/5 建议范围")
 
     # 推荐题目：符合所有要求 + 近三年
     reference_topics = _build_reference_topics(

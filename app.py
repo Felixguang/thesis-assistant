@@ -291,19 +291,11 @@ class ThesisAssistantApp:
         lines.append(f"{'='*70}\n")
 
         # 选题库统计摘要（基于真实正选题）
-        lib_info = r.get("library_insights", {})
-        if lib_info:
-            lines.append(f"📚 选题库: {lib_info.get('total', 0)} 条真实正选题（2019-2026 届）")
-            d_stats = lib_info.get("direction_stats", {})
-            if d_stats:
-                order = ["翻译", "跨文化", "话语分析", "商务英语习得", "其他"]
-                stats_lines = [f"  方向分布: " + " · ".join(
-                    f"{k}={v}" for k, v in (d_stats.get(k, 0) for k in order) if k in d_stats
-                )]
-                # 简洁一行
-                summary = "  ·  ".join(f"{k} {v}" for k, v in d_stats.items())
-                lines.append(f"  · {summary}")
-            lines.append("")
+        # 已隐藏，避免冗余
+        # lib_info = r.get("library_insights", {})
+        # if lib_info:
+        #     lines.append(f"📚 选题库: {lib_info.get('total', 0)} 条真实正选题（2019-2026 届）")
+        #     lines.append("")
 
         # 顶部摘要
         lines.append(f"⚠️  风险评分: {r['risk_level']}  ({r['risk_score']} / 100)")
@@ -321,10 +313,7 @@ class ThesisAssistantApp:
             lines.append(f"   方向: 🚫 不属于商务英语 4 大方向，不建议")
         else:
             lines.append(f"   方向: {suggested}")
-        # 方向热度
-        dh = r.get("direction_heat", {})
-        if dh and dh.get("count_in_library"):
-            lines.append(f"   方向热度: {dh['assessment']}（库中 {dh['count_in_library']} 条 / {dh['percentage']}）")
+        # 方向热度（已隐藏，避免冗余）
         lines.append("")
 
         # 5 段建议（直接展示 r["suggestions"]）
