@@ -1354,7 +1354,7 @@ def check_document(docx_path: str) -> dict:
                         "suggestion": (
                             f"作者漏按 Enter 导致章节标题「{tail_title}」被拼接到正文末尾。"
                             f"请将光标定位到「{tail_title}」之前，按 Enter 单独成段，"
-                            f"然后为该段应用一级标题格式（Times New Roman 四号加粗居中）。"
+                            f"然后为该段应用一级标题格式（Times New Roman 四号加粗、左顶格）。"
                         ),
                         "zone": "正文",
                     })
@@ -1861,9 +1861,9 @@ def check_document(docx_path: str) -> dict:
                     "rule": "一级标题字号",
                     "severity": "中",
                     "location": f"第{idx+1}段：「{text[:40]}」",
-                    "expected": "Times New Roman 四号加粗居中",
+                    "expected": "Times New Roman 四号加粗、左顶格",
                     "actual": f"当前字号 {_pt_to_zh(sz)}",
-                    "suggestion": "一级标题应用 Times New Roman 四号加粗居中。正确格式示例：「2  Theory and Methodology」（Times New Roman 四号加粗居中）",
+                    "suggestion": "一级标题应用 Times New Roman 四号加粗、左顶格。正确格式示例：「2  Theory and Methodology」（Times New Roman 四号加粗、左顶格）",
                     "zone": zone,
                 })
             if _is_run_bold_inherited(run, para) is False:
@@ -1873,7 +1873,7 @@ def check_document(docx_path: str) -> dict:
                     "location": f"第{idx+1}段：「{text[:40]}」",
                     "expected": "Times New Roman 四号加粗",
                     "actual": "当前未加粗",
-                    "suggestion": "一级标题必须加粗。正确格式示例：「2  Theory and Methodology」（Times New Roman 四号加粗居中）",
+                    "suggestion": "一级标题必须加粗。正确格式示例：「2  Theory and Methodology」（Times New Roman 四号加粗、左顶格）",
                     "zone": zone,
                 })
             # 字体检查
