@@ -1919,6 +1919,17 @@ def check_document(docx_path: str) -> dict:
                     ),
                     "zone": zone,
                 })
+            # 一级标题应对齐：左顶格（不应居中）
+            if _is_paragraph_centered(para):
+                _add_issue({
+                    "rule": "一级标题对齐",
+                    "severity": "中",
+                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "expected": "左顶格",
+                    "actual": "居中",
+                    "suggestion": "一级标题应左顶格，不应居中。请选中该段，开始选项卡 → 段落 → 对齐方式 → 左对齐（Ctrl+L）",
+                    "zone": zone,
+                })
         elif level == 2 and para.runs:
             heading_count[2] += 1
             run = _first_nonempty_run(para) or para.runs[0]
@@ -1965,6 +1976,17 @@ def check_document(docx_path: str) -> dict:
                     "suggestion": "标题实词首字母应大写",
                     "zone": zone,
                 })
+            # 二级标题应对齐：左顶格（不应居中）
+            if _is_paragraph_centered(para):
+                _add_issue({
+                    "rule": "二级标题对齐",
+                    "severity": "中",
+                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "expected": "左顶格",
+                    "actual": "居中",
+                    "suggestion": "二级标题应左顶格，不应居中。请选中该段，开始选项卡 → 段落 → 对齐方式 → 左对齐（Ctrl+L）",
+                    "zone": zone,
+                })
         elif level == 3 and para.runs:
             heading_count[3] += 1
             run = _first_nonempty_run(para) or para.runs[0]
@@ -2009,6 +2031,17 @@ def check_document(docx_path: str) -> dict:
                     "expected": "实词首字母大写",
                     "actual": tc_issue,
                     "suggestion": "标题实词首字母应大写",
+                    "zone": zone,
+                })
+            # 三级标题应对齐：左顶格（不应居中）
+            if _is_paragraph_centered(para):
+                _add_issue({
+                    "rule": "三级标题对齐",
+                    "severity": "中",
+                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "expected": "左顶格",
+                    "actual": "居中",
+                    "suggestion": "三级标题应左顶格，不应居中。请选中该段，开始选项卡 → 段落 → 对齐方式 → 左对齐（Ctrl+L）",
                     "zone": zone,
                 })
 
