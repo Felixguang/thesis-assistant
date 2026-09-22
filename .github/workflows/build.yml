@@ -3,7 +3,6 @@ name: 构建 Windows / macOS 可执行程序
 on:
   push:
     branches: [main]
-    # 也可以加 tag 触发：tags: ['v*']
   workflow_dispatch:    # 允许手动触发
 
 jobs:
@@ -23,24 +22,15 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-          cache: pip
 
-      - name: 安装依赖（macOS）
+      - name: 安装并打包（macOS）
         if: matrix.os == 'macos-latest'
         run: |
+          set -e
           python3 -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: 安装依赖（Windows）
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: PyInstaller 打包（macOS）
-        if: matrix.os == 'macos-latest'
-        run: |
+          python3 -m pip install --no-cache-dir -r requirements.txt
+          # 验证 pyinstaller 真的装上了
+          which pyinstaller || python3 -m PyInstaller --version
           pyinstaller --onefile --windowed --name "商务英语毕业论文助手" \
             --add-data "data/topics.json:data" \
             --collect-submodules=docx \
@@ -49,10 +39,15 @@ jobs:
             --hidden-import=openpyxl.styles \
             app.py
 
-      - name: PyInstaller 打包（Windows）
+      - name: 安装并打包（Windows）
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip install --upgrade pip
+          python -m pip install --no-cache-dir -r requirements.txt
+          # 验证 pyinstaller 真的装上了
+          pyinstaller --version
           pyinstaller --onefile --windowed --name "商务英语毕业论文助手" `
             --add-data "data/topics.json;data" `
             --collect-submodules=docx `
@@ -67,7 +62,7 @@ jobs:
           cd dist
           zip -r 商务英语毕业论文助手-macOS.zip 商务英语毕业论文助手.app
 
-      - name: 重命名产物（Windows）
+      - name: 压缩产物（Windows）
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
@@ -81,5 +76,5 @@ jobs:
           name: 商务英语毕业论文助手-${{ matrix.os }}
           path: |
             dist/*.zip
-            dist/*.app/  # macOS（仅 macOS runner 存在）
+            dist/*.app/
           if-no-files-found: warn
