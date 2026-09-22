@@ -565,6 +565,7 @@ class ThesisAssistantApp:
 
         tk.Label(filter_frame, text="搜索:", font=_cn_font(10)).pack(side="left")
         self.search_var = tk.StringVar()
+        # 搜索框 debounce（每个键击一次，太频繁需要节流）
         self.search_var.trace_add("write", lambda *_: self._schedule_refresh())
         tk.Entry(filter_frame, textvariable=self.search_var,
                  font=_cn_font(10), width=30, relief="solid", bd=1).pack(side="left", padx=5)
@@ -572,18 +573,22 @@ class ThesisAssistantApp:
         tk.Label(filter_frame, text="方向:", font=_cn_font(10)).pack(side="left", padx=(20, 0))
         self.direction_var = tk.StringVar(value="全部")
         directions = ["全部", "翻译", "跨文化", "话语分析", "商务英语习得"]
-        ttk.Combobox(filter_frame, textvariable=self.direction_var,
+        self.direction_combo = ttk.Combobox(filter_frame, textvariable=self.direction_var,
                      values=directions, state="readonly", width=12
-                     ).pack(side="left", padx=5)
-        self.direction_var.trace_add("write", lambda *_: self._schedule_refresh())
+                     )
+        self.direction_combo.pack(side="left", padx=5)
+        # ttk.Combobox + state="readonly" + trace_add 在某些场景不触发，
+        # 用 <<ComboboxSelected>> 虚拟事件更可靠
+        self.direction_combo.bind("<<ComboboxSelected>>", lambda e: self._refresh_library())
 
         tk.Label(filter_frame, text="年份:", font=_cn_font(10)).pack(side="left", padx=(20, 0))
         self.year_var = tk.StringVar(value="全部")
         years = ["全部", "2026", "2025", "2024", "2023", "2022", "2021", "2020", "2019"]
-        ttk.Combobox(filter_frame, textvariable=self.year_var,
+        self.year_combo = ttk.Combobox(filter_frame, textvariable=self.year_var,
                      values=years, state="readonly", width=8
-                     ).pack(side="left", padx=5)
-        self.year_var.trace_add("write", lambda *_: self._schedule_refresh())
+                     )
+        self.year_combo.pack(side="left", padx=5)
+        self.year_combo.bind("<<ComboboxSelected>>", lambda e: self._refresh_library())
 
         # 导出按钮（单独一行，靠右，避免被搜索/筛选控件挤窄）
         export_row = ttk.Frame(f)
@@ -645,10 +650,17 @@ class ThesisAssistantApp:
         self._refresh_after_id = self.after(200, self._refresh_library)
 
     def _refresh_library(self):
-        lib = load_library()
-        keyword = self.search_var.get().strip().lower()
-        direction = self.direction_var.get()
-        year = self.year_var.get()
+        try:
+            lib = load_library()
+            keyword = self.search_var.get().strip().lower()
+            direction = self.direction_var.get()
+            year = self.year_var.get()
+        except Exception as e:
+            import traceback
+            print(f"[_refresh_library] 初始化失败: {e}")
+            traceback.print_exc()
+            self.status_var.set(f"刷新失败: {e}")
+            return
 
         # 收集筛选结果
         matched = []
