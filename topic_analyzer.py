@@ -837,7 +837,10 @@ def analyze_topic(user_title: str) -> dict:
         cat = scope_result["matched_category"]
         suggestions.append(f"   ✅ 符合本专业「{cat}」方向")
         suggestions.append(f"   说明：{scope_result.get('description', '')}")
-        suggestions.append(f"   ⚠️ 商务英语专业的核心要求：选题必须能体现『商务环境』（商务话语/商务文本/跨文化商务/商务教学）")
+        # 商务英语专业 4 大选题方向
+        cat_list = "、".join(SCOPE_CATEGORIES.keys())
+        suggestions.append(f"   📋 商务英语专业 4 大选题方向：{cat_list}")
+        suggestions.append("   ⚠️ 商务英语专业的核心要求：选题必须能体现『商务环境』（商务话语/商务文本/跨文化商务/商务教学）")
     else:
         suggestions.append("   ❌ 不在 4 大专业范围内")
         suggestions.append("   本专业 4 大方向：")
