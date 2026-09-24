@@ -188,11 +188,7 @@ class ThesisAssistantApp:
             fg="#7f8c8d", font=_cn_font(10),
         ).pack(side="left", padx=10)
 
-        # 顶部右侧按钮：导入选题
-        make_button(header, "📥 导入选题", self._on_import_topics,
-                    style="primary", padx=14, pady=8,
-                    font=_cn_font(10, bold=True)).pack(side="right", padx=10)
-
+        # "导入选题"按钮已迁移到「选题库浏览」tab 内（与导出按钮同一行，靠左）
         # 主体：Notebook 三个标签页
         notebook = ttk.Notebook(root)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
@@ -609,10 +605,14 @@ class ThesisAssistantApp:
         self.year_combo.pack(side="left", padx=5)
         self.year_combo.bind("<<ComboboxSelected>>", lambda e: self._refresh_library())
 
-        # 导出按钮（单独一行，靠右，避免被搜索/筛选控件挤窄）
+        # 导入 / 导出按钮（同一行，导入靠左、导出靠右）
         export_row = ttk.Frame(f)
         export_row.pack(fill="x", padx=20, pady=(4, 0))
 
+        make_button(export_row, "📥 导入选题",
+                    self._on_import_topics,
+                    style="primary", padx=14, pady=6,
+                    font=_cn_font(10, bold=True)).pack(side="left")
         make_button(export_row, "📊 导出 Excel",
                     self._on_export_excel,
                     style="success", padx=18, pady=6,
