@@ -26,6 +26,11 @@ from topic_analyzer import analyze_topic, invalidate_library_cache, load_library
 # 跨平台中文字体检测（模块级缓存，避免反复探测）
 _LINUX_CN_FONT: Optional[str] = None
 
+# DPI 缩放因子：main() 探测后写入，_cn_font() 据此放大字号
+# 1.0 = 96 DPI（普通屏）；1.25/1.5/2.0 = 高 DPI
+# 计算公式：px_per_cm / 37.8（96 DPI = 37.8 px/cm）
+_DPI_SCALE: float = 1.0
+
 
 def _detect_linux_cn_font() -> Optional[str]:
     """探测当前 Linux 桌面可用的中文字体（fc-list 优先，回退 tk 探测）。
@@ -70,28 +75,34 @@ def _detect_linux_cn_font() -> Optional[str]:
 
 
 def _cn_font(size: int = 10, bold: bool = False) -> tuple:
-    """根据操作系统返回可用的中文字体。找不到就退回系统默认。"""
+    """根据操作系统返回可用的中文字体（字号已按 DPI 缩放）。
+
+    scale_factor 由 main() 在创建 Tk root 后探测并写入 _DPI_SCALE，
+    使 _cn_font() 在调用时按比例缩放字号，跨高 DPI 屏不显小。
+    """
     weights = ("bold",) if bold else ()
+    scaled = max(8, int(round(size * _DPI_SCALE)))
     if sys.platform == "darwin":
-        return ("PingFang SC", size) + weights
+        return ("PingFang SC", scaled) + weights
     elif sys.platform == "win32":
         # Windows 优先用微软雅黑，找不到退回系统默认中文字体
-        return ("Microsoft YaHei", size) + weights
+        return ("Microsoft YaHei", scaled) + weights
     else:  # Linux / 其他
         f = _detect_linux_cn_font()
         if f:
-            return (f, size) + weights
-        return ("TkDefaultFont", size) + weights
+            return (f, scaled) + weights
+        return ("TkDefaultFont", scaled) + weights
 
 
 def _mono_font(size: int = 10) -> tuple:
     """跨平台等宽字体（用于检查结果展示）。"""
+    scaled = max(8, int(round(size * _DPI_SCALE)))
     if sys.platform == "darwin":
-        return ("Menlo", size)
+        return ("Menlo", scaled)
     elif sys.platform == "win32":
-        return ("Consolas", size)
+        return ("Consolas", scaled)
     else:
-        return ("DejaVu Sans Mono", size)
+        return ("DejaVu Sans Mono", scaled)
 
 # macOS 上 tk.Button 的 fg/bg 在 Aqua 主题下可能被忽略，
 # 这里用一个 dict 来统一管理按钮配色，保证白字看得清
@@ -159,8 +170,8 @@ class ThesisAssistantApp:
     def __init__(self, root):
         self.root = root
         root.title("商务英语毕业论文助手 v0.2 — 仲恺农业工程学院外国语学院")
-        root.geometry("960x720")
-        root.minsize(800, 600)
+        # 窗口尺寸 / 最小尺寸在 main() 里按物理 cm 设置（跨 DPI 一致）
+        # 不再在 __init__ 硬编码像素值，避免被高分屏压缩成小窗
 
         self.status_var = tk.StringVar(value="就绪")
 
@@ -895,22 +906,59 @@ def _setup_high_dpi():
 
 
 def main():
+    global _DPI_SCALE
     _setup_high_dpi()
     root = tk.Tk()
 
-    # macOS Retina 屏需要 tk scaling = 2.0 才能跟系统一致（普通屏 1.0）
-    # 探测方式：winfo_fpixels("1c") 返回 1cm 对应的物理像素数
-    #   普通屏 ≈ 567 (~96 DPI)；Retina ≈ 1134 (~192 DPI)
-    if sys.platform == "darwin":
-        try:
-            root.update_idletasks()
-            px_per_cm = root.winfo_fpixels("1c")
-            scaling = 2.0 if px_per_cm > 800 else 1.0
-            root.tk.call("tk", "scaling", scaling)
-        except Exception:
-            pass
+    # === 跨平台 DPI 探测 + 缩放设置 ===
+    # winfo_fpixels("1c") 返回 1 cm 对应的物理像素：
+    #   96 DPI ≈ 37.8 px/cm;   120 DPI ≈ 47.2;   144 DPI ≈ 56.7;   192 DPI (Retina) ≈ 75.6
+    # 基准 96 DPI → 1.0；比例 = px_per_cm / 37.8。
+    # 这样窗口/字号都按物理尺寸缩放，Windows 高 DPI 屏不再"挤在小窗口里"，
+    # macOS Retina 屏字号不显小。
+    try:
+        root.update_idletasks()
+        px_per_cm = root.winfo_fpixels("1c")
+        # 钳制在 [1.0, 2.5]：避免 4K 屏字号爆炸
+        _DPI_SCALE = max(1.0, min(2.5, px_per_cm / 37.8))
+        # macOS 强制 ≥1.25（Retina 一律按高分屏处理，避免文字偏小）
+        # 设 1.25 是折中：Retina 上 12.5px（接近普通屏 13）、普通屏不放大爆炸
+        if sys.platform == "darwin":
+            _DPI_SCALE = max(_DPI_SCALE, 1.25)
+        root.tk.call("tk", "scaling", _DPI_SCALE)
+    except Exception:
+        _DPI_SCALE = 1.0
+
+    # === 全局 ttk Style：放大 Notebook 标签 + Treeview 行高 ===
+    style = ttk.Style()
+    # Treeview 字号随 DPI 缩放；行高 = 字号 + padding（避免行间挤压）
+    tv_font_size = max(9, int(round(10 * _DPI_SCALE)))
+    style.configure("Treeview", font=_cn_font(10), rowheight=tv_font_size + int(round(8 * _DPI_SCALE)))
+    style.configure("Treeview.Heading", font=_cn_font(10, bold=True))
+    # Notebook tab 内边距（左右各 12px，上下各 6px），让标签更醒目
+    pad_x = int(round(12 * _DPI_SCALE))
+    pad_y = int(round(6 * _DPI_SCALE))
+    style.configure("TNotebook.Tab", padding=(pad_x, pad_y), font=_cn_font(11, bold=True))
+    # LabelFrame 标题字号
+    style.configure("TLabelframe.Label", font=_cn_font(10, bold=True))
 
     ThesisAssistantApp(root)
+
+    # === 窗口尺寸按物理 cm 计算（跨平台一致）===
+    # 默认 26 cm 宽 × 19 cm 高，最小 22 cm × 16 cm
+    try:
+        root.update_idletasks()
+        px_per_cm = root.winfo_fpixels("1c")
+        w = int(round(26 * px_per_cm))
+        h = int(round(19 * px_per_cm))
+        min_w = int(round(22 * px_per_cm))
+        min_h = int(round(16 * px_per_cm))
+        root.geometry(f"{w}x{h}")
+        root.minsize(min_w, min_h)
+    except Exception:
+        root.geometry("960x720")
+        root.minsize(800, 600)
+
     root.update_idletasks()
     root.update()
     root.after(100, lambda: root.update_idletasks())
