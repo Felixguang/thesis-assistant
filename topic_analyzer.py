@@ -913,7 +913,7 @@ def analyze_topic(user_title: str) -> dict:
             suggestions.append(f"      • {th}（往届用过 {c} 次）")
     if relevant_cold:
         suggestions.append("")
-        suggestions.append("      ✨ 以下理论在往届选题中较少使用，可考虑。建议自行寻找合适理论：")
+        suggestions.append("      ✨ 以下理论在往届选题中较少使用，可考虑。建议自行寻找合适理论。")
         for th, c, d in relevant_cold[:5]:
             tag = f" [{d}]" if d != "通用" else ""
             suggestions.append(f"      • {th}（往届用过 {c} 次）{tag}")
