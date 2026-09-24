@@ -45,7 +45,7 @@ _RE_APPENDIX_SOLO = re.compile(r"^\s*Appendix\s*$")
 _RE_ACK_ZH = re.compile(r"^致谢")
 _RE_ACK_EN = re.compile(r"^Acknowledgement", re.I)
 _RE_EXAMPLE = re.compile(r"^\s*Example\s+\d+\s*[:：]")
-_RE_DIAGRAM = re.compile(r"^\s*(Diagram|Figure|图)\s*\d+", re.I)
+_RE_DIAGRAM = re.compile(r"^\s*(Diagram|Figure|图|Picture|Example)\s*[\dA-Z]", re.I)
 _RE_TABLE = re.compile(r"^\s*(Table|表)\s*\d+", re.I)
 _RE_REF_TYPE_TAG = re.compile(r"\[(M|J|C|D|R|N|S|P|A|EB/OL|DB/CD|Z)\]")
 _RE_HEADING_NUM = re.compile(r"^\s*(\d+(?:\.\d+){0,2})\s+[一-龥A-Za-z]")
@@ -585,6 +585,13 @@ _HEADING_STYLE_NAMES = {
 
 _HEADING_TEXT_RE = re.compile(r"^\s*(\d{1,2}(?:\.\d{1,2}){0,3})\s+\S")
 
+# 仲恺商英规范约束（用户确认）：
+# - L1 数字只能是 1-4（论文一共有 4 个一级标题：引言/理论方法/结果讨论/结论）
+# - L2 数字段（主编号）只能是 1-9
+# - L3 数字段（主编号）只能是 1-9
+# 例如 "50 undergraduate students..."（主编号 50 > 4）即使符合标题正则也不算 L1。
+_HEADING_NUM_LIMITS = {1: (1, 4), 2: (1, 9), 3: (1, 9)}
+
 
 def _para_style_name(para) -> str:
     """容错读取段落样式名。"""
@@ -659,10 +666,19 @@ def _detect_headings(paragraphs) -> List[Dict]:
 
         # 1) 文本数字编号（最权威：1 / 1.1 / 1.1.1）
         #    Word 有时把 1/1.1/1.1.1 全部用 Heading 1 样式，但编号才是真正的级别。
+        #    守卫：
+        #    - 标题通常 ≤ 80 字符；超过则视为正文段（防 "50 undergraduate students..." 被误判为 L1）
+        #    - 主编号按级别有范围限制（L1 1-4, L2/L3 1-9，符合仲恺商英规范）
         m_num = _HEADING_TEXT_RE.match(text)
-        if m_num and not _is_toc_paragraph(para):
-            dots = m_num.group(1).count(".")
+        if m_num and not _is_toc_paragraph(para) and len(text) <= 80:
+            num_str = m_num.group(1)
+            dots = num_str.count(".")
             level = min(dots + 1, 3)
+            # 检查主编号是否在合法范围内
+            main_num = int(num_str.split(".")[0])
+            limit_min, limit_max = _HEADING_NUM_LIMITS.get(level, (1, 99))
+            if not (limit_min <= main_num <= limit_max):
+                level = None  # 超出范围（如 "50 undergraduate..."），不算章节标题
 
         # 1b) 兜底：数字编号出现在段落末尾（典型场景：作者漏按 Enter，
         #     "4 Conclusion" 被拼到上一段正文末尾 "...cognitive load.4  Conclusion"）。
@@ -702,7 +718,10 @@ def _detect_headings(paragraphs) -> List[Dict]:
                     level = 4
 
         # 3) 短段落 Normal 样式 + TOC 标题模糊匹配（兜底：标题丢失编号）
-        #    守卫：跳过 back-matter 区域头（Bibliography / Acknowledgements / 致谢等）
+        #    守卫：
+        #    - 跳过 back-matter 区域头（Bibliography / Acknowledgements / 致谢 / Appendix 等）
+        #    - 跳过图表标题（Table 2 / 表 2 / Figure 1 / 图 1）——它们常与 TOC 里的小节名重名（如
+        #      "Normality Test" 同时是 L3 标题和表题的前缀）
         if level is None and sn in {"normal", "list paragraph", ""} and 4 <= len(text) <= 80:
             text_lc = text.lower().strip()
             is_back_matter_head = (
@@ -711,7 +730,11 @@ def _detect_headings(paragraphs) -> List[Dict]:
                 or re.match(r"^acknowledg", text_lc) is not None
                 or re.match(r"^appendix", text_lc) is not None
             )
-            if is_back_matter_head:
+            is_caption = bool(
+                re.match(r"^\s*(Table|表|Figure|图|Picture|Example)\s*\d", text_lc, re.IGNORECASE)
+                or re.match(r"^\s*(Table|表|Figure|图|Picture|Example)\s+[A-Z]", text_lc, re.IGNORECASE)
+            )
+            if is_back_matter_head or is_caption:
                 continue  # 不当作章节标题
             nt = _norm(text)
             for lvl in (1, 2, 3):
@@ -777,7 +800,8 @@ def _detect_zones_v2(doc) -> "OrderedDict[str, Tuple[int, int]]":
     sdt_with_toc: List[int] = []  # ci of sdt whose text contains "Table of Contents"
     for ci, child in enumerate(body_children):
         tag = child.tag.split("}")[-1]
-        text = "".join(child.itertext())
+        # 只取 <w:t> 节点文本（避免某些导出工具在 <w:p> 下放 orphan 文本节点导致重复）
+        text = "".join(t.text or "" for t in child.iter(qn("w:t")))
         if tag == "p":
             para = para_by_element.get(child)
             # 关键防御：toc 1 样式的段落（如目录里的 "Bibliography\t44"）
@@ -836,7 +860,7 @@ def _detect_zones_v2(doc) -> "OrderedDict[str, Tuple[int, int]]":
                 if tag == "sdt":
                     continue  # 跳过中间可能的 SDT
                 para = para_by_element.get(body_children[ci])
-                text = "".join(body_children[ci].itertext()).strip()
+                text = "".join(t.text or "" for t in body_children[ci].iter(qn("w:t"))).strip()
                 if not text:
                     continue  # 跳过空段落
                 if _is_toc_paragraph(para):
@@ -950,11 +974,16 @@ def _is_body_paragraph(text: str, para, zone: str) -> bool:
     is_cap, _ = _is_figure_or_table_caption(text)
     if is_cap:
         return False
+    text_strip = text.strip()
     # 区域标题本身（如 "Acknowledgements"、"致谢"）不应被当作正文段
-    if text.strip() in (
+    if text_strip in (
         "Table of Contents", "Bibliography", "Appendix",
         "Acknowledgements", "致谢", "参考文献", "目录",
     ):
+        return False
+    # 附录标题段（如 "Appendix A Screenshots of ..."、"Appendix B The Test ..."）
+    # 不算正文段，单独走附录标题检查
+    if re.match(r"^\s*Appendix\s+[A-Z]", text_strip, re.IGNORECASE):
         return False
     return True
 
