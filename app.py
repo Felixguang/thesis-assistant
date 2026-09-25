@@ -169,7 +169,7 @@ def make_button(parent, text, command, style="primary", **kw):
 class ThesisAssistantApp:
     def __init__(self, root):
         self.root = root
-        root.title("商务英语毕业论文助手 v0.2 — 仲恺农业工程学院外国语学院")
+        root.title("商务英语毕业论文助手 v0.3 — 仲恺农业工程学院外国语学院")
         # 窗口尺寸 / 最小尺寸在 main() 里按物理 cm 设置（跨 DPI 一致）
         # 不再在 __init__ 硬编码像素值，避免被高分屏压缩成小窗
 
