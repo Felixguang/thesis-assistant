@@ -580,10 +580,17 @@ class ThesisAssistantApp:
 
         tk.Label(filter_frame, text="搜索:", font=_cn_font(10)).pack(side="left")
         self.search_var = tk.StringVar()
-        # 搜索框 debounce（每个键击一次，太频繁需要节流）
+        # 1) trace 触发（英文/数字键击）
+        # 2) KeyRelease 触发（中文 IME 输入：trace 在 IME 组字阶段不触发，
+        #    但用户敲完最后一个键、字符上屏时会触发 KeyRelease）
+        # 双保险：单独输入关键词也能即时看到匹配结果。
         self.search_var.trace_add("write", lambda *_: self._schedule_refresh())
-        tk.Entry(filter_frame, textvariable=self.search_var,
-                 font=_cn_font(10), width=30, relief="solid", bd=1).pack(side="left", padx=5)
+        search_entry = tk.Entry(filter_frame, textvariable=self.search_var,
+                 font=_cn_font(10), width=30, relief="solid", bd=1)
+        search_entry.pack(side="left", padx=5)
+        search_entry.bind("<KeyRelease>", lambda e: self._schedule_refresh())
+        # IME 中文输入结束（composition end）也触发一次
+        search_entry.bind("<<Commit>>", lambda e: self._schedule_refresh())
 
         tk.Label(filter_frame, text="方向:", font=_cn_font(10)).pack(side="left", padx=(20, 0))
         self.direction_var = tk.StringVar(value="全部")
