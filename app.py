@@ -581,16 +581,21 @@ class ThesisAssistantApp:
         tk.Label(filter_frame, text="搜索:", font=_cn_font(10)).pack(side="left")
         self.search_var = tk.StringVar()
         # 1) trace 触发（英文/数字键击）
-        # 2) KeyRelease 触发（中文 IME 输入：trace 在 IME 组字阶段不触发，
-        #    但用户敲完最后一个键、字符上屏时会触发 KeyRelease）
-        # 双保险：单独输入关键词也能即时看到匹配结果。
+        # 2) <Key> 触发（按键即触发，最稳）
+        # 3) <KeyRelease> 补充（IME 上屏阶段）
+        # 4) <<Commit>> IME 组字结束
+        # 多重保险：单独输入关键词也能即时看到匹配结果。
         self.search_var.trace_add("write", lambda *_: self._schedule_refresh())
         search_entry = tk.Entry(filter_frame, textvariable=self.search_var,
                  font=_cn_font(10), width=30, relief="solid", bd=1)
         search_entry.pack(side="left", padx=5)
+        # 按下任何键都触发（最稳，包括 IME）
+        search_entry.bind("<Key>", lambda e: self._schedule_refresh())
         search_entry.bind("<KeyRelease>", lambda e: self._schedule_refresh())
-        # IME 中文输入结束（composition end）也触发一次
         search_entry.bind("<<Commit>>", lambda e: self._schedule_refresh())
+        # 粘贴 / 剪切后内容变了但不一定触发键事件
+        search_entry.bind("<<Paste>>", lambda e: self.root.after(50, self._refresh_library))
+        search_entry.bind("<<Cut>>", lambda e: self.root.after(50, self._refresh_library))
 
         tk.Label(filter_frame, text="方向:", font=_cn_font(10)).pack(side="left", padx=(20, 0))
         self.direction_var = tk.StringVar(value="全部")
@@ -667,13 +672,11 @@ class ThesisAssistantApp:
         self._refresh_library()
 
     def _schedule_refresh(self):
-        """debounce：搜索/筛选变更后 150ms 再刷新，避免每个键击都重绘 Treeview。"""
-        if hasattr(self, "_refresh_after_id") and self._refresh_after_id:
-            try:
-                self.after_cancel(self._refresh_after_id)
-            except Exception:
-                pass
-        self._refresh_after_id = self.after(150, self._refresh_library)
+        """搜索/筛选变更后立即刷新（150ms debounce 已在测试中发现死循环风险，改为直接刷新）。
+
+        Treeview 项数 ≤ 1000，刷新一次开销很小（< 50ms），无需 debounce。
+        """
+        self._refresh_library()
 
     def _refresh_library(self):
         try:
