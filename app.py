@@ -648,9 +648,12 @@ class ThesisAssistantApp:
         tree.heading("id", text="编号")
         tree.heading("title", text="题目")
         tree.heading("direction", text="方向")
-        tree.column("id", width=70, anchor="center")
-        tree.column("title", width=400)
-        tree.column("direction", width=80, anchor="center")
+        tree.column("id", width=80, anchor="center")
+        tree.column("title", width=320, stretch=True)  # stretch=True: 多余宽度分给标题列
+        tree.column("direction", width=90, anchor="center")
+        # 显式给 Treeview 内容字体（部分 macOS 上 style.configure 的字体不生效，
+        # 这里通过 tag_configure 兜底，确保中文字体正确渲染避免"残影"）
+        tree.tag_configure("row", font=_cn_font(max(9, int(round(10 * _DPI_SCALE)))))
 
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
@@ -719,12 +722,14 @@ class ThesisAssistantApp:
             self.library_tree.delete(item)
         for t in matched:
             title = t["title"]
-            # 智能截断：保留关键词上下文（默认 38 字符宽度）
-            display_title = self._truncate_with_keyword(title, keyword, width=38)
-            self.library_tree.insert("", "end", values=(
-                t["id"], display_title,
-                t.get("direction", "其他"),
-            ))
+            # 智能截断：保留关键词上下文（默认 28 字符宽度）
+            # Treeview 标题列宽 320px ≈ 26 个中文字符；28 字符 + 1 个省略号刚好 1 行
+            display_title = self._truncate_with_keyword(title, keyword, width=28)
+            self.library_tree.insert(
+                "", "end",
+                values=(t["id"], display_title, t.get("direction", "其他")),
+                tags=("row",),
+            )
 
         # 状态栏：明确反馈搜索结果（包含关键词命中位置提示）
         kw_msg = ""
@@ -989,10 +994,12 @@ def main():
 
     # === 全局 ttk Style：放大 Notebook 标签 + Treeview 行高 ===
     style = ttk.Style()
-    # Treeview 字号随 DPI 缩放；行高 = 字号 + padding（避免行间挤压）
+    # Treeview 字号随 DPI 缩放；行高 = 字号 × 1.8 + padding
+    # （中文需要 ≈字号×1.5 的 baseline，行间再留 12px 防止换行字符叠到下一行）
     tv_font_size = max(9, int(round(10 * _DPI_SCALE)))
-    style.configure("Treeview", font=_cn_font(10), rowheight=tv_font_size + int(round(8 * _DPI_SCALE)))
-    style.configure("Treeview.Heading", font=_cn_font(10, bold=True))
+    row_h = int(round(tv_font_size * 1.8 + 12 * _DPI_SCALE))
+    style.configure("Treeview", font=_cn_font(tv_font_size), rowheight=row_h)
+    style.configure("Treeview.Heading", font=_cn_font(tv_font_size, bold=True))
     # Notebook tab 内边距（左右各 12px，上下各 6px），让标签更醒目
     pad_x = int(round(12 * _DPI_SCALE))
     pad_y = int(round(6 * _DPI_SCALE))
