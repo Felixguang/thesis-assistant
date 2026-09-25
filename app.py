@@ -660,13 +660,13 @@ class ThesisAssistantApp:
         self._refresh_library()
 
     def _schedule_refresh(self):
-        """debounce：搜索/筛选变更后 200ms 再刷新，避免每个键击都重绘 Treeview。"""
+        """debounce：搜索/筛选变更后 150ms 再刷新，避免每个键击都重绘 Treeview。"""
         if hasattr(self, "_refresh_after_id") and self._refresh_after_id:
             try:
                 self.after_cancel(self._refresh_after_id)
             except Exception:
                 pass
-        self._refresh_after_id = self.after(200, self._refresh_library)
+        self._refresh_after_id = self.after(150, self._refresh_library)
 
     def _refresh_library(self):
         try:
@@ -682,14 +682,22 @@ class ThesisAssistantApp:
             return
 
         # 收集筛选结果
+        # 关键词匹配：标题 + id + 方向 + 年份（多字段联合，提升搜索体验）
         matched = []
         for t in lib["topics"]:
             if direction != "全部" and t.get("direction") != direction:
                 continue
             if year != "全部" and str(t.get("year", "")) != year:
                 continue
-            if keyword and keyword not in t["title"].lower():
-                continue
+            if keyword:
+                haystack = " ".join([
+                    str(t.get("title", "")).lower(),
+                    str(t.get("id", "")).lower(),
+                    str(t.get("direction", "")).lower(),
+                    str(t.get("year", "")).lower(),
+                ])
+                if keyword not in haystack:
+                    continue
             matched.append(t)
         self._current_topics = matched
 
@@ -700,15 +708,55 @@ class ThesisAssistantApp:
         for item in self.library_tree.get_children():
             self.library_tree.delete(item)
         for t in matched:
+            title = t["title"]
+            # 智能截断：保留关键词上下文（默认 38 字符宽度）
+            display_title = self._truncate_with_keyword(title, keyword, width=38)
             self.library_tree.insert("", "end", values=(
-                t["id"], t["title"][:55] + ("…" if len(t["title"]) > 55 else ""),
+                t["id"], display_title,
                 t.get("direction", "其他"),
             ))
 
+        # 状态栏：明确反馈搜索结果（包含关键词命中位置提示）
+        kw_msg = ""
+        if keyword:
+            kw_msg = f"，关键词「{keyword}」命中 {len(matched)} 条"
         self.status_var.set(
             f"选题库: {lib['metadata']['total']} 条 | "
-            f"当前筛选 {len(matched)} 条"
+            f"当前筛选 {len(matched)} 条{kw_msg}"
         )
+
+    @staticmethod
+    def _truncate_with_keyword(text: str, keyword: str, width: int = 38) -> str:
+        """智能截断：若有关键词，保留关键词所在位置的上下文；否则截首部。
+
+        例如 '基于目的论探讨跨境电商营销的翻译策略' + 关键词 '跨境电商' + width=20
+        → '…探讨跨境电商营销的翻译策略…'
+        """
+        if len(text) <= width:
+            return text
+        if not keyword:
+            return text[:width] + "…"
+
+        k_lower = keyword.lower()
+        t_lower = text.lower()
+        pos = t_lower.find(k_lower)
+        if pos < 0:
+            return text[:width] + "…"
+        # 让关键词尽量居中：左 padding = (width - len(keyword)) // 2
+        kw_len = len(keyword)
+        if kw_len >= width:
+            return "…" + text[max(0, pos):][:width]
+        left_pad = max(0, (width - kw_len) // 2)
+        # 计算 start：让关键词在 [start, start+width] 内
+        start = max(0, pos - left_pad)
+        end = start + width
+        if end > len(text):
+            start = max(0, len(text) - width)
+            end = len(text)
+        snippet = text[start:end]
+        prefix = "…" if start > 0 else ""
+        suffix = "…" if end < len(text) else ""
+        return prefix + snippet + suffix
 
     def _get_export_rows(self) -> list[dict]:
         """获取当前筛选结果，统一字段顺序"""
