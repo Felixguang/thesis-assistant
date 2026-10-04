@@ -45,7 +45,7 @@ _RE_APPENDIX_SOLO = re.compile(r"^\s*Appendix\s*$")
 _RE_ACK_ZH = re.compile(r"^致谢")
 _RE_ACK_EN = re.compile(r"^Acknowledgement", re.I)
 _RE_EXAMPLE = re.compile(r"^\s*Example\s+\d+\s*[:：]")
-_RE_DIAGRAM = re.compile(r"^\s*(Diagram|Figure|图|Picture|Example)\s*[\dA-Z]", re.I)
+_RE_DIAGRAM = re.compile(r"^\s*(Diagram|Figure|图|Picture)\s*[\dA-Z]", re.I)
 _RE_TABLE = re.compile(r"^\s*(Table|表)\s*\d+", re.I)
 _RE_REF_TYPE_TAG = re.compile(r"\[(M|J|C|D|R|N|S|P|A|EB/OL|DB/CD|Z)\]")
 _RE_HEADING_NUM = re.compile(r"^\s*(\d+(?:\.\d+){0,2})\s+[一-龥A-Za-z]")
@@ -667,10 +667,10 @@ def _detect_headings(paragraphs) -> List[Dict]:
         # 1) 文本数字编号（最权威：1 / 1.1 / 1.1.1）
         #    Word 有时把 1/1.1/1.1.1 全部用 Heading 1 样式，但编号才是真正的级别。
         #    守卫：
-        #    - 标题通常 ≤ 80 字符；超过则视为正文段（防 "50 undergraduate students..." 被误判为 L1）
-        #    - 主编号按级别有范围限制（L1 1-4, L2/L3 1-9，符合仲恺商英规范）
+        #    - 标题通常较短；上限放宽到 200 字符（防 "50 undergraduate students..." 被误判为 L1），
+        #      同时由主编号范围限制兜底（L1 1-4, L2/L3 1-9，符合仲恺商英规范）。
         m_num = _HEADING_TEXT_RE.match(text)
-        if m_num and not _is_toc_paragraph(para) and len(text) <= 80:
+        if m_num and not _is_toc_paragraph(para) and len(text) <= 200:
             num_str = m_num.group(1)
             dots = num_str.count(".")
             level = min(dots + 1, 3)
@@ -1679,7 +1679,7 @@ def check_document(docx_path: str) -> dict:
                         _add_issue({
                             "rule": "目录正文字号",
                             "severity": "低",
-                            "location": f"第{idx+1}段：「{text[:40]}」",
+                            "location": f"第{idx+1}段：「{text[:80]}」",
                             "expected": "Times New Roman 小四（12pt）",
                             "actual": f"当前字号 {_pt_to_zh(sz)}",
                             "suggestion": "目录条目应小四",
@@ -1690,7 +1690,7 @@ def check_document(docx_path: str) -> dict:
                         _add_issue({
                             "rule": "目录正文字体",
                             "severity": "低",
-                            "location": f"第{idx+1}段：「{text[:40]}」",
+                            "location": f"第{idx+1}段：「{text[:80]}」",
                             "expected": "Times New Roman",
                             "actual": font_name,
                             "suggestion": "目录正文字体应为 Times New Roman",
@@ -1702,7 +1702,7 @@ def check_document(docx_path: str) -> dict:
                         _add_issue({
                             "rule": "目录正文行距",
                             "severity": "低",
-                            "location": f"第{idx+1}段：「{text[:40]}」",
+                            "location": f"第{idx+1}段：「{text[:80]}」",
                             "expected": "1.5 倍",
                             "actual": f"{ls}",
                             "suggestion": "目录正文行距应为 1.5 倍",
@@ -1889,7 +1889,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "一级标题字号",
                     "severity": "中",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "Times New Roman 四号加粗、左顶格",
                     "actual": f"当前字号 {_pt_to_zh(sz)}",
                     "suggestion": "一级标题应用 Times New Roman 四号加粗、左顶格。正确格式示例：「2  Theory and Methodology」（Times New Roman 四号加粗、左顶格）",
@@ -1899,7 +1899,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "一级标题加粗",
                     "severity": "中",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "Times New Roman 四号加粗",
                     "actual": "当前未加粗",
                     "suggestion": "一级标题必须加粗。正确格式示例：「2  Theory and Methodology」（Times New Roman 四号加粗、左顶格）",
@@ -1911,7 +1911,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "一级标题字体",
                     "severity": "低",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "Times New Roman",
                     "actual": font_name,
                     "suggestion": "一级标题字体应为 Times New Roman",
@@ -1923,7 +1923,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "一级标题实词大小写",
                     "severity": "低",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "实词首字母大写（Title Case）",
                     "actual": tc_issue,
                     "suggestion": "标题各层实词首字母应大写，虚词小写",
@@ -1935,7 +1935,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "章节另起一页",
                     "severity": "低",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "每章（一级标题）另起一页（规范要求）",
                     "actual": "未发现分页符"
                     + ("  [视觉上有空行分隔]" if has_visual else ""),
@@ -1953,7 +1953,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "一级标题对齐",
                     "severity": "中",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "左顶格",
                     "actual": "居中",
                     "suggestion": "一级标题应左顶格",
@@ -1967,7 +1967,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "二级标题字号",
                     "severity": "中",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "Times New Roman 小四（12pt）加粗",
                     "actual": f"当前字号 {_pt_to_zh(sz)}",
                     "suggestion": "二级标题应用小四加粗",
@@ -1977,7 +1977,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "二级标题加粗",
                     "severity": "中",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "加粗",
                     "actual": "当前未加粗",
                     "suggestion": "二级标题必须加粗",
@@ -1988,7 +1988,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "二级标题字体",
                     "severity": "低",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "Times New Roman",
                     "actual": font_name,
                     "suggestion": "二级标题字体应为 Times New Roman",
@@ -1999,7 +1999,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "二级标题实词大小写",
                     "severity": "低",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "实词首字母大写",
                     "actual": tc_issue,
                     "suggestion": "标题实词首字母应大写",
@@ -2010,7 +2010,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "二级标题对齐",
                     "severity": "中",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "左顶格",
                     "actual": "居中",
                     "suggestion": "二级标题应左顶格",
@@ -2024,7 +2024,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "三级标题字号",
                     "severity": "中",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "Times New Roman 小四（12pt）",
                     "actual": f"当前字号 {_pt_to_zh(sz)}",
                     "suggestion": "三级标题应用小四",
@@ -2034,7 +2034,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "三级标题加粗",
                     "severity": "低",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "不加粗",
                     "actual": "当前加粗",
                     "suggestion": "三级标题不应加粗",
@@ -2045,7 +2045,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "三级标题字体",
                     "severity": "低",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "Times New Roman",
                     "actual": font_name,
                     "suggestion": "三级标题字体应为 Times New Roman",
@@ -2056,7 +2056,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "三级标题实词大小写",
                     "severity": "低",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "实词首字母大写",
                     "actual": tc_issue,
                     "suggestion": "标题实词首字母应大写",
@@ -2067,7 +2067,7 @@ def check_document(docx_path: str) -> dict:
                 _add_issue({
                     "rule": "三级标题对齐",
                     "severity": "中",
-                    "location": f"第{idx+1}段：「{text[:40]}」",
+                    "location": f"第{idx+1}段：「{text[:80]}」",
                     "expected": "左顶格",
                     "actual": "居中",
                     "suggestion": "三级标题应左顶格",
@@ -2217,7 +2217,7 @@ def check_document(docx_path: str) -> dict:
             _add_issue({
                 "rule": "参考文献数量",
                 "severity": "高",
-                "location": f"参考文献区段（{ref_section_start + 1}段后）",
+                "location": f"参考文献区段（{ref_range[0] + 1}段后）",
                 "expected": "不少于 15 篇",
                 "actual": f"检测到 {ref_count} 条",
                 "suggestion": "请补充至至少 15 篇（涵盖近 5 年文献）",

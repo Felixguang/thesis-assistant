@@ -9,6 +9,7 @@
 import json
 import re
 from collections import Counter
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from paths import resource_path
@@ -22,7 +23,7 @@ DOMAIN_DICT = [
     "目的论", "文化维度", "功能对等", "生态翻译学", "多模态话语分析",
     "关联理论", "顺应论", "接受美学", "言语行为", "高低语境",
     "礼貌原则", "霍夫斯泰德文化维度理论", "文化维度理论", "跨文化交际",
-    "建构主义", "批评话语分析", "视觉语法", "元话语", "文化图式",
+    "建构主义", "批评话语分析", "批判话语分析", "视觉语法", "元话语", "文化图式",
     "互文性", "语用学", "情感过滤假说", "TPACK理论", "监控理论",
     "认知负荷理论", "文化适应理论", "企业识别系统理论", "纽马克翻译二分法",
     "语境教学法", "形态学理论", "评价理论", "共情理论", "原型理论",
@@ -31,7 +32,8 @@ DOMAIN_DICT = [
     # 商务场景
     "跨境电商", "电商直播", "直播带货", "商务谈判", "商务函电",
     "商务沟通", "商务话语", "公示语", "字幕翻译", "菜名翻译",
-    "广告语", "广告翻译", "合同翻译", "产品描述", "用户手册",
+    "广告语", "广告翻译", "合同翻译", "产品描述", "用户手册", "企业简介",
+    "企业官网简介", "官网简介", "公司简介", "新闻发言人", "新闻发布会",
     "说明书", "术语规范化", "英译", "汉译", "英译本",
     "归化", "异化", "创译法", "外宣翻译", "中医术语",
     "法律文本", "格式条款", "外宣", "字幕", "菜名", "广告",
@@ -219,7 +221,7 @@ def detect_theory_expression(title: str) -> dict:
     known_theories = [
         "功能对等理论", "功能对等", "目的论", "顺应论", "顺应理论",
         "礼貌原则", "跨文化交际", "跨文化传播", "多模态话语分析",
-        "视觉语法", "批评话语分析", "批评话语", "语用学",
+        "视觉语法", "批评话语分析", "批判话语分析", "批评话语", "批判话语", "语用学",
         "关联理论", "生态翻译学", "接受美学", "文化图式",
         "文化适应理论", "情感过滤假说", "情感过滤", "监控理论",
         "认知负荷理论", "TPACK", "TPACK理论", "建构主义",
@@ -261,6 +263,15 @@ def detect_object_expression(title: str) -> dict:
     """识别题目中的研究对象 + 表达方式
     返回：{has_object: bool, object_name: str, expression_pattern: str}
     """
+    # 0. "[理论]X下[对象]的[主题]" 模式
+    # 例如："批评话语分析视角下阿里巴巴官网企业简介的身份建构研究"
+    under_theory_match = re.search(
+        r"[一-龥A-Za-z]{2,15}(?:视角|理论|视阈|视域|之下)下"
+        r"([^，。；、《》—–—]{2,30}?)"
+        r"的",
+        title,
+    )
+
     # 1. 以X为例
     case_match = re.search(r"以([^，。；、]{2,30}?)为例", title)
     # 2. 以X为语料/对象/案例
@@ -285,6 +296,9 @@ def detect_object_expression(title: str) -> dict:
     elif dash_match:
         obj = dash_match.group(1).strip()
         pattern = "破折号引出对象"
+    elif under_theory_match:
+        obj = under_theory_match.group(1).strip()
+        pattern = "理论下…的…结构"
 
     # 主标题末尾的对象（如《XX》书名/品牌名）
     if not obj:
@@ -491,22 +505,22 @@ def get_library_insights() -> dict:
         # 跨文化方向
         "跨文化交际": "跨文化", "文化维度": "跨文化", "霍夫斯泰德": "跨文化",
         "高低语境": "跨文化", "文化图式": "跨文化",
-        "文化适应": "跨文化", "文化身份": "跨文化", "文化价值": "跨文化",
-        "面子理论": "跨文化", "身份建构": "跨文化",
+        "文化适应": "跨文化", "文化价值": "跨文化",
+        "面子理论": "跨文化", "霍尔": "跨文化",
         # 话语分析方向
         "多模态话语分析": "话语分析", "视觉语法": "话语分析",
         "批评话语分析": "话语分析", "元话语": "话语分析",
         "互文性": "话语分析", "接受美学": "话语分析", "语用学": "话语分析",
         "评价理论": "话语分析", "态度系统": "话语分析", "及物性": "话语分析",
-        "概念隐喻": "话语分析", "概念整合": "话语分析", "叙事学": "话语分析",
-        "拟剧论": "话语分析", "语码转换": "话语分析", "符号学": "话语分析",
+        "概念隐喻": "话语分析", "概念整合": "话语分析", "叙事学": "话语分析", "拟剧论": "话语分析",
+        "语码转换": "话语分析", "符号学": "话语分析", "顺应论": "话语分析",
         # 商务英语习得方向
         "TPACK": "商务英语习得", "认知负荷": "商务英语习得",
         "情感过滤": "商务英语习得", "语境教学法": "商务英语习得",
         "建构主义": "商务英语习得", "产出导向法": "商务英语习得",
         "输入假设": "商务英语习得", "词块理论": "商务英语习得",
         # 通用（跨多个方向）
-        "顺应论": "通用", "礼貌原则": "通用", "言语行为": "通用",
+        "礼貌原则": "通用", "言语行为": "通用",
     }
     theory_counter = Counter()
     for t in topics:
@@ -620,6 +634,7 @@ def _check_narrowness(title: str, theory_info: dict, object_info: dict) -> dict:
     # 主题/问题关键词：翻译策略、特征、机制、影响、作用、建构、实践、应用
     theme_pat = re.compile(
         r"(翻译策略|翻译方法|话语策略|话语建构|话语特征|语言特征|建构研究|"
+        r"身份建构|形象建构|国家形象建构|企业形象建构|品牌建构|"
         r"应用研究|影响研究|作用研究|机制研究|实践研究|教学策略|教学模式|"
         r"传播策略|营销策略|本土化策略|跨文化策略|适应性研究|创新路径|"
         r"教学效果|学习效果|习得效果|接受效果|传播效果)",
@@ -719,9 +734,15 @@ def analyze_topic(user_title: str) -> dict:
     length_info = _check_length_strict(user_title)
     narrowness = _check_narrowness(user_title, theory_info, object_info)
 
-    # === 撞题检测 ===
+    # === 撞题检测（仅按题目文字重合度）===
     matches = []
-    user_kw_set = {k.lower() for k in keywords}
+    user_kw_set = {k.lower() for k in keywords}  # 保留用于参考展示，不作为入撞条件
+    def _normalize(s: str) -> str:
+        s = re.sub(r"[基于以从依据根据]+", "", s)
+        s = re.sub(r"(视角|理论|视阈|视域|之下|下|的|研究|为例|为例分析)", "", s)
+        s = re.sub(r"[，。；、《》—–——()（）]", "", s)
+        return s.strip()
+    user_norm = _normalize(user_title)
     for t in lib["topics"]:
         t_kws = set()
         for kw in t.get("keywords", []):
@@ -731,36 +752,46 @@ def analyze_topic(user_title: str) -> dict:
                     t_kws.add(k.lower())
         for tk in extract_keywords(t["title"]):
             t_kws.add(tk.lower())
-        overlap = user_kw_set & t_kws
-        if len(overlap) >= 2:
+        overlap = user_kw_set & t_kws   # 仅作参考展示
+        # 文字重合度（规范化后做 SequenceMatcher）
+        t_norm = _normalize(t["title"])
+        if not user_norm or not t_norm:
+            text_ratio = 0.0
+        else:
+            text_ratio = SequenceMatcher(None, user_norm, t_norm).ratio()
+        # 入库条件：仅按文字重合度 ≥50%
+        if text_ratio >= 0.50:
             matches.append({
                 "id": t["id"],
                 "title": t["title"],
                 "overlap": list(overlap),
                 "overlap_count": len(overlap),
+                "text_overlap": round(text_ratio * 100, 1),
                 "direction": t.get("direction", "其他"),
                 "year": t.get("year", "?"),
             })
-    matches.sort(key=lambda x: x["overlap_count"], reverse=True)
+    # 按文字重合度降序
+    matches.sort(key=lambda x: x["text_overlap"], reverse=True)
 
-    # === 创新性评估 ===
+    # === 创新性评估（按题目文字重合度）===
     if matches:
         top = matches[0]
-        if top["overlap_count"] >= 3:
+        top_text = top.get("text_overlap", 0)
+        if top_text >= 70:
             innov_level = "🔴 高度撞题"
             innov_detail = (
                 f"与 {top['year']} 届「{top['title'][:30]}...」"
-                f"共享 {top['overlap_count']} 个关键词，方向/对象/主题可能重复"
+                f"题目文字重合 {top_text:.0f}%，方向/对象/主题可能重复"
             )
-        elif top["overlap_count"] == 2:
+        elif top_text >= 50:
             innov_level = "🟡 可能撞题"
             innov_detail = (
                 f"与 {top['year']} 届「{top['title'][:30]}...」"
-                f"共享 {top['overlap_count']} 个关键词，需明确差异化"
+                f"题目文字重合 {top_text:.0f}%，需明确差异化"
             )
         else:
             innov_level = "🟢 创新性可接受"
-            innov_detail = f"最高撞题 {top['overlap_count']} 个关键词，差异化可行"
+            innov_detail = f"最高文字重合 {top_text:.0f}%，差异化可行"
     else:
         innov_level = "🟢 创新性可接受"
         innov_detail = "未检测到与往届高重叠的选题"
@@ -794,18 +825,16 @@ def analyze_topic(user_title: str) -> dict:
         risk += 6
         risks.append(f"选题基本聚焦：{narrowness['assessment']}")
 
-    # 3. 撞题：20-40
+    # 3. 撞题：仅按题目文字重合度
     if matches:
         top = matches[0]
-        if top["overlap_count"] >= 4:
-            risk += 35
-            risks.append(f"与往届高度撞题（共享 {top['overlap_count']} 个关键词）")
-        elif top["overlap_count"] >= 3:
-            risk += 22
-            risks.append(f"与往届中度撞题（共享 {top['overlap_count']} 个关键词）")
-        elif top["overlap_count"] == 2:
-            risk += 10
-            risks.append(f"与往届轻度撞题（共享 2 个关键词）")
+        top_text = top.get("text_overlap", 0)
+        if top_text >= 70:
+            risk += 30
+            risks.append(f"题目与往届文字重合度高（{top_text:.0f}% ≥ 70%）")
+        elif top_text >= 50:
+            risk += 15
+            risks.append(f"题目与往届文字重合度中（{top_text:.0f}% ≥ 50%）")
 
     # 4. 字数不符：8
     if length_info["assessment"] in ("偏短", "偏长", "字数需调整"):
@@ -867,7 +896,7 @@ def analyze_topic(user_title: str) -> dict:
         suggestions.append("   撞题 Top 3：")
         for m in matches[:3]:
             suggestions.append(f"   • [{m['id']}] {m['year']}届·{m['direction']}：{m['title'][:50]}...")
-            suggestions.append(f"     共享 {m['overlap_count']} 个关键词：{', '.join(list(m['overlap'])[:4])}")
+            suggestions.append(f"     题目文字重合 {m.get('text_overlap', 0):.0f}%")
     suggestions.append("")
 
     # === 段 4：选题是否符合字数要求和表达要求 ===
@@ -911,7 +940,7 @@ def analyze_topic(user_title: str) -> dict:
             relevant_cold = all_theories[:5]
 
     if high_freq:
-        suggestions.append("      ⚠️  谨慎使用（往届 ≥ 24 次，撞题风险高）：")
+        suggestions.append("      ⚠️  谨慎使用（往届高频前 5 名，撞题风险高）：")
         for th, c, _ in high_freq:
             suggestions.append(f"      • {th}（往届用过 {c} 次）")
     if relevant_cold:
@@ -920,7 +949,7 @@ def analyze_topic(user_title: str) -> dict:
         for th, c, d in relevant_cold[:5]:
             tag = f" [{d}]" if d != "通用" else ""
             suggestions.append(f"      • {th}（往届用过 {c} 次）{tag}")
-    if matches and matches[0]["overlap_count"] >= 3:
+    if matches and matches[0].get("text_overlap", 0) >= 70:
         top_match = matches[0]
         suggestions.append(f"   • 去撞题：与 {top_match['year']} 届「{top_match['title'][:30]}」撞题严重")
         suggestions.append("      三种改法：换案例 / 换理论 / 缩子方向")
