@@ -76,11 +76,17 @@ def _detect_linux_cn_font() -> Optional[str]:
 
 
 def _cn_font(size: int = 10, bold: bool = False, italic: bool = False) -> tuple:
-    """sans 字体（标题栏 / 标签 / location pill / 9-11pt 元信息用）"""
+    """sans 字体（标题栏 / 标签 / location pill / 9-11pt 元信息用）
+
+    字号缩放策略（避免双重缩放）：
+    - Mac:   ×1.25（tk scaling 接管 Retina，字体额外补一点避免偏小）
+    - Win/Linux: ×1.0（tk scaling 已接管高 DPI，字体不再乘）
+    """
     weights = ()
     if bold: weights = weights + ("bold",)
     if italic: weights = weights + ("italic",)
-    scaled = max(8, int(round(size * _DPI_SCALE)))
+    scale = 1.25 if sys.platform == "darwin" else 1.0
+    scaled = max(8, int(round(size * scale)))
     if sys.platform == "darwin":
         return ("PingFang SC", scaled) + weights
     elif sys.platform == "win32":
@@ -101,7 +107,8 @@ def _serif_font(size: int = 12, bold: bool = False, italic: bool = False) -> tup
     weights = ()
     if bold: weights = weights + ("bold",)
     if italic: weights = weights + ("italic",)
-    scaled = max(8, int(round(size * _DPI_SCALE)))
+    scale = 1.25 if sys.platform == "darwin" else 1.0
+    scaled = max(8, int(round(size * scale)))
     if sys.platform == "darwin":
         return ("Songti SC", scaled) + weights
     elif sys.platform == "win32":
@@ -124,13 +131,15 @@ def _latin_font(size: int = 10, bold: bool = False, italic: bool = False) -> tup
     weights = ()
     if bold: weights = weights + ("bold",)
     if italic: weights = weights + ("italic",)
-    scaled = max(8, int(round(size * _DPI_SCALE)))
+    scale = 1.25 if sys.platform == "darwin" else 1.0
+    scaled = max(8, int(round(size * scale)))
     return ("Times New Roman", scaled) + weights
 
 
 def _mono_font(size: int = 10) -> tuple:
     """跨平台等宽字体（用于检查结果展示）。"""
-    scaled = max(8, int(round(size * _DPI_SCALE)))
+    scale = 1.25 if sys.platform == "darwin" else 1.0
+    scaled = max(8, int(round(size * scale)))
     if sys.platform == "darwin":
         return ("Menlo", scaled)
     elif sys.platform == "win32":
@@ -576,16 +585,18 @@ class ThesisAssistantApp:
         canvas.create_rectangle(6, 44, w-2, 46, fill=ink, outline="")
 
     def _build_tab_ribbon(self, parent, label, key):
-        """单条 v2 卷边 ribbon：Canvas + 6px 上圆下平 + 底部赭石下划线 + 12pt 衬线"""
+        """单条 v2 卷边 ribbon：Canvas + 6px 上圆下平 + 底部赭石下划线 + 11pt"""
         container = tk.Frame(parent, bg=PALETTE["paper"])
-        cw, ch = 132, 38
+        # 按钮尺寸也按 DPI 缩放（与字体匹配），避免 Windows 高 DPI 下文字溢出
+        cw = int(round(132 * _DPI_SCALE))
+        ch = int(round(38 * _DPI_SCALE))
         canvas = tk.Canvas(
             container, width=cw, height=ch,
             bg=PALETTE["paper"], highlightthickness=0, bd=0,
         )
         canvas.pack(side="top")
-        # 6px 上圆角，下平贴 spine（border-bottom: none）
-        r = 6
+        # 6px 上圆角，下平贴 spine（border-bottom: none）—— r 也跟 DPI 走
+        r = max(4, int(round(6 * _DPI_SCALE)))
         pts = [
             0, r, r, 0,
             cw-1-r, 0, cw-1, r,
@@ -595,10 +606,10 @@ class ThesisAssistantApp:
         bg_color = "#ffffff"
         outline_color = "#d8d2c4"
         canvas.create_polygon(pts, fill=bg_color, outline=outline_color, width=1)
-        # 文字（衬线 11pt，留白更舒展）
+        # 文字（跨平台字体 + 跟 DPI 缩放）
         lbl = tk.Label(
             container, text=label,
-            font=("PingFang SC", 11),
+            font=_cn_font(11),
             bg=bg_color, fg="#3d3d3d",
             cursor="hand2", bd=0, highlightthickness=0,
             padx=0, pady=0,
@@ -619,10 +630,10 @@ class ThesisAssistantApp:
         canvas = entry["canvas"]
         lbl = entry["lbl"]
         canvas.delete("all")
-        cw = canvas.winfo_width() or 132
-        ch = canvas.winfo_height() or 38
-        # 上圆下平（仅顶部 6px 圆角）
-        r = 6
+        cw = canvas.winfo_width() or int(round(132 * _DPI_SCALE))
+        ch = canvas.winfo_height() or int(round(38 * _DPI_SCALE))
+        # 上圆下平（仅顶部 6px 圆角，跟 DPI 走）
+        r = max(4, int(round(6 * _DPI_SCALE)))
         pts = [
             0, r, r, 0,
             cw-1-r, 0, cw-1, r,
@@ -632,16 +643,17 @@ class ThesisAssistantApp:
             # 选中：白底 + moss 加粗字 + 赭石下划线（保持 secondary 主调，仅下划线暗示选中）
             bg = "#ffffff"
             fg = PALETTE["moss"]
-            lbl.config(bg=bg, fg=fg, font=("PingFang SC", 11, "bold"))
+            lbl.config(bg=bg, fg=fg, font=_cn_font(11, bold=True))
         else:
             # 未选中：「导出报告」一致的 secondary 配色
             bg = "#ffffff"
             fg = "#3d3d3d"
-            lbl.config(bg=bg, fg=fg, font=("PingFang SC", 11))
+            lbl.config(bg=bg, fg=fg, font=_cn_font(11))
         canvas.create_polygon(pts, fill=bg, outline="#d8d2c4", width=1)
         if active:
-            # 底部 36×3 赭石下划线
-            ul_w, ul_h = 36, 3
+            # 底部 36×3 赭石下划线（跟 DPI 走）
+            ul_w = int(round(36 * _DPI_SCALE))
+            ul_h = max(2, int(round(3 * _DPI_SCALE)))
             canvas.create_rectangle(
                 (cw - ul_w) // 2, ch - ul_h,
                 (cw + ul_w) // 2, ch,
@@ -2896,17 +2908,27 @@ def main():
     # winfo_fpixels("1c") 返回 1 cm 对应的物理像素：
     #   96 DPI ≈ 37.8 px/cm;   120 DPI ≈ 47.2;   144 DPI ≈ 56.7;   192 DPI (Retina) ≈ 75.6
     # 基准 96 DPI → 1.0；比例 = px_per_cm / 37.8。
-    # 这样窗口/字号都按物理尺寸缩放，Windows 高 DPI 屏不再"挤在小窗口里"，
-    # macOS Retina 屏字号不显小。
+    #
+    # 【重要】tk 的 `tk scaling` 命令本身就会把所有字号/几何按这个倍率放大，
+    # 所以**字体函数不能再额外乘 _DPI_SCALE**（否则双重缩放，Windows 高 DPI 下字号爆炸）。
+    #
+    # 我们的设计：
+    # - Mac:   _DPI_SCALE = 1.25（Retina 强制），字体函数仍按 1.25× 算 → tk 再缩 1.25×
+    #         = 实际显示约 1.56× 基准字号（接近 Mac 系统习惯）
+    # - Win:   _DPI_SCALE = 1.0（让 tk scaling 自己处理 150%/200%），字体函数不再乘
+    #         → 字号不双重缩放，文本框不会膨胀
+    # - Linux: 同 Windows，_DPI_SCALE = 1.0
     try:
         root.update_idletasks()
         px_per_cm = root.winfo_fpixels("1c")
-        # 钳制在 [1.0, 2.5]：避免 4K 屏字号爆炸
-        _DPI_SCALE = max(1.0, min(2.5, px_per_cm / 37.8))
-        # macOS 强制 ≥1.25（Retina 一律按高分屏处理，避免文字偏小）
-        # 设 1.25 是折中：Retina 上 12.5px（接近普通屏 13）、普通屏不放大爆炸
+        # 探测到的 raw 物理缩放，仅用于 Mac 的 Retina 强制下限
+        raw_scale = px_per_cm / 37.8
         if sys.platform == "darwin":
-            _DPI_SCALE = max(_DPI_SCALE, 1.25)
+            # Mac: 强制 ≥1.25（Retina 一律按高分屏处理），同时传给 tk scaling
+            _DPI_SCALE = max(1.25, min(2.5, raw_scale))
+        else:
+            # Windows / Linux: 让 tk scaling 直接接管高 DPI，字体不二次放大
+            _DPI_SCALE = max(1.0, min(2.5, raw_scale))
         root.tk.call("tk", "scaling", _DPI_SCALE)
     except Exception:
         _DPI_SCALE = 1.0
