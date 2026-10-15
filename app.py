@@ -2386,8 +2386,8 @@ class ThesisAssistantApp:
             matched.append(t)
         self._current_topics = matched
 
-        # 按届别倒序、标题字典序，2019 在末尾、2026 在最前
-        matched.sort(key=lambda t: (-int(str(t.get('year', '0')) or 0), t['title']))
+        # 按届别倒序（2026 在最前、2019 在末尾），同届按编号升序（XXX-001 → XXX-NNN）
+        matched.sort(key=lambda t: (-int(str(t.get('year', '0')) or 0), str(t.get('id', ''))))
 
         # 高效更新：先 detach 所有 → 重新 insert → 避免逐个 delete
         for item in self.library_tree.get_children():
