@@ -2038,7 +2038,7 @@ class ThesisAssistantApp:
         tk.Frame(lead_row, bg=PALETTE["ochre"], width=3).pack(side="left", fill="y", padx=(0, 9))
         self.lib_lead_lbl = tk.Label(
             lead_row,
-            text=f"浏览往届毕业论文选题库（共 {_total} 条 · 2020-2026 届），按关键词 / 方向 / 年份检索，查看每个选题的研究方向、关键词与同类选题。",
+            text=f"浏览往届毕业论文选题库（共 {_total} 条 · 2019-2026 届），按关键词 / 方向 / 年份检索，查看每个选题的研究方向、关键词与同类选题。",
             font=_serif_font(10.5), fg=PALETTE["ink_soft"], bg=PALETTE["bg"],
             justify="left", anchor="w", padx=0, pady=0,
         )
