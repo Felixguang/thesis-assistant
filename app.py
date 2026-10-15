@@ -2141,11 +2141,24 @@ class ThesisAssistantApp:
         tree.heading("id", text="编号")
         tree.heading("title", text="题目")
         tree.heading("direction", text="方向")
-        tree.column("id", width=70, anchor="center")
-        tree.column("title", width=340, stretch=True)
-        tree.column("direction", width=110, anchor="center")
+        tree.column("id", width=70, anchor="center", stretch=False)
+        tree.column("title", width=340, anchor="w", stretch=True)
+        tree.column("direction", width=110, anchor="center", stretch=False)
         # 行字体固定 8pt（不随 DPI 缩放，避免 Retina 下变 20pt 过大）
         tree.tag_configure("row", font=_cn_font(8))
+        # 题目列跟随窗口宽度自动调整（paned 不会把多余宽度给 list，stirct 也不够；
+        # 需要在 <Configure> 时把 tree 实际宽度减去另外两列，得到题目列宽）
+        def _auto_resize_title_column(event=None):
+            try:
+                tree.update_idletasks()
+                total = tree.winfo_width()
+                # 减去垂直滚动条（约 16px）和 1px 边框
+                fixed_cols = 70 + 110 + 18
+                new_w = max(180, total - fixed_cols)
+                tree.column("title", width=new_w)
+            except Exception:
+                pass
+        tree.bind("<Configure>", _auto_resize_title_column)
 
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
